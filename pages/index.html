@@ -10,25 +10,18 @@
 <body>
   <div class="wrap">
     <p class="kicker">TheBabelDragon · field-stations</p>
-    <h1>Prove one byte.</h1>
-    <p class="lede">Elapsed-time clock. Brightest-cell lock. RAW bits first. Packets later.</p>
+    <h1>Lock the disc.<br />Read the byte.</h1>
+    <p class="lede">Tap is a lock. AUTO hunts a blinking disc, not the brightest lamp. Clock comes from 1010, not from the payload.</p>
 
     <div class="card">
-      <h2>STAGE 1</h2>
-      <pre>quiet 00000000
-SYM   01100111   (67)</pre>
-      <p class="lede">Decoder should print those 8 bits. That is the only proof that matters right now.</p>
+      <h2>PHY</h2>
+      <pre>CLOCK  10101010 10101010
+SYNC   11001100
+DATA   payload byte</pre>
       <div class="row">
         <a href="tx.html?station=7F29&amp;sym=67&amp;stage=1&amp;period=120"><button class="primary">TRANSMITTER</button></a>
-        <a href="decode.html?station=7F29&amp;sym=67&amp;stage=1&amp;period=120"><button class="primary">DECODER</button></a>
+        <a href="decode.html?station=7F29&amp;stage=1&amp;period=120"><button class="primary">DECODER</button></a>
       </div>
-    </div>
-
-    <div class="card">
-      <h2>LATER</h2>
-      <pre>stage=2  preamble + symbol
-stage=3  + station
-stage=4  + seq + crc</pre>
     </div>
   </div>
 </body>

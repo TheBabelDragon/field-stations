@@ -1,6 +1,7 @@
-import { TimeSeries, sampleRegion, findBrightestCell } from "./optical/sampler.js";
+import { TimeSeries, sampleRegion } from "./optical/sampler.js";
 import { recentStats } from "./optical/demodulator.js";
-import { decodeStage, estimateSymbolMs, sliceRaw, byteBits } from "./optical/phy.js";
+import { cellGrid, scoreCells, estimateClockMs, sliceFrom, correlateStart } from "./optical/detect.js";
+import { CLOCK_TRAIN, decodeBits } from "./optical/phy.js";
 import { parseBootstrap } from "./station/station-config.js";
 
 const cfg = parseBootstrap();
@@ -21,17 +22,19 @@ const modeLabel = document.getElementById("mode-label");
 const wave = document.getElementById("wave");
 const waveCtx = wave.getContext("2d");
 const banner = document.getElementById("loop-banner");
+const unlockBtn = document.getElementById("unlock");
+const lockNote = document.getElementById("lock-note");
 
-const series = new TimeSeries(6000);
+const series = new TimeSeries(8000);
 const work = document.createElement("canvas");
 const workCtx = work.getContext("2d", { willReadFrequently: true });
 const overCtx = overlay.getContext("2d");
-const expectBits = byteBits(cfg.payload).join("");
+const history = [];
 
+let mode = "AUTO";
 let running = false;
 let aim = { nx: 0.5, ny: 0.5 };
-let tapUntil = 0;
-let lastHit = "";
+let lastPayload = null;
 let audioCtx = null;
 
 function log(line) {
@@ -41,7 +44,16 @@ function log(line) {
 function setState(name, cls) {
   listenState.textContent = name;
   listenState.className = "status " + (cls || "search");
-  document.body.classList.toggle("locked", cls === "ok");
+  document.body.classList.toggle("locked", mode === "LOCKED");
+}
+
+function setMode(next) {
+  mode = next;
+  unlockBtn.textContent = mode === "LOCKED" ? "UNLOCK" : "AUTO";
+  lockNote.textContent = mode;
+  modeLabel.textContent = mode === "LOCKED"
+    ? `LOCKED  ${(aim.nx * 100).toFixed(0)},${(aim.ny * 100).toFixed(0)}`
+    : "AUTO — searching for a blinking disc";
 }
 
 function pulse() {
@@ -59,7 +71,7 @@ function pulse() {
   navigator.vibrate?.([30, 40, 70]);
 }
 
-function paintWave(bitsOk) {
+function paintWave(ok) {
   const w = wave.width;
   const h = wave.height;
   waveCtx.fillStyle = "#10101c";
@@ -67,7 +79,7 @@ function paintWave(bitsOk) {
   const slice = series.samples.slice(-160);
   if (slice.length < 2) return;
   waveCtx.beginPath();
-  waveCtx.strokeStyle = bitsOk ? "#7dffb2" : "#7ee7ff";
+  waveCtx.strokeStyle = ok ? "#7dffb2" : "#7ee7ff";
   waveCtx.lineWidth = 1.5;
   slice.forEach((s, i) => {
     const x = (i / (slice.length - 1)) * w;
@@ -85,82 +97,62 @@ function paintOverlay(spot, ok) {
   if (!spot) return;
   const x = spot.x * overlay.width / work.width;
   const y = spot.y * overlay.height / work.height;
-  overCtx.strokeStyle = ok ? "rgba(125,255,178,0.95)" : "rgba(255,211,126,0.95)";
-  overCtx.lineWidth = 2;
-  const rw = (spot.w || 40) * overlay.width / work.width;
-  const rh = (spot.h || 40) * overlay.height / work.height;
-  overCtx.strokeRect(x - rw / 2, y - rh / 2, rw, rh);
+  overCtx.strokeStyle = mode === "LOCKED" ? "rgba(125,255,178,0.95)" : ok ? "rgba(255,211,126,0.95)" : "rgba(126,231,255,0.8)";
+  overCtx.lineWidth = mode === "LOCKED" ? 3 : 2;
+  overCtx.strokeRect(x - 26, y - 26, 52, 52);
 }
 
-function lockSpot(image) {
-  const bright = findBrightestCell(image, 14, 0.1);
-  if (performance.now() < tapUntil) {
-    return {
-      x: aim.nx * work.width,
-      y: aim.ny * work.height,
-      w: 44,
-      h: 44,
-      value: bright.value,
-    };
-  }
-  aim.nx = aim.nx * 0.55 + (bright.x / work.width) * 0.45;
-  aim.ny = aim.ny * 0.55 + (bright.y / work.height) * 0.45;
-  return {
-    x: aim.nx * work.width,
-    y: aim.ny * work.height,
-    w: Math.max(28, bright.w || 36),
-    h: Math.max(28, bright.h || 36),
-    value: bright.value,
-  };
-}
-
-function apply(bits, period, brightness, contrast) {
-  const raw = bits.join("");
-  const shown = raw.slice(-24) || "—";
-  rawLine.textContent = `RAW ${shown}`;
-  syncLine.textContent = period ? `Clock ${Math.round(period)}ms` : "Clock measuring";
+function apply(decoded, bits, period, brightness, contrast, signal) {
+  rawLine.textContent = `RAW ${(bits.join("") || "—").slice(-32)}`;
+  syncLine.textContent = period ? `Clock ${Math.round(period)}ms` : "Clock —";
   sigBar.style.width = `${Math.round(Math.max(0, Math.min(1, brightness)) * 100)}%`;
   conBar.style.width = `${Math.round(Math.max(0, Math.min(1, contrast / 0.45)) * 100)}%`;
-  diag.textContent = `${(brightness * 100).toFixed(0)}%  con ${(contrast * 100).toFixed(0)}%  stage ${cfg.stage}`;
-
-  const decoded = decodeStage(cfg.stage, bits, { payload: cfg.payload, stationId: cfg.stationId });
-  const ok = decoded.rejected == null;
+  diag.textContent = `${mode}  con ${(contrast * 100).toFixed(0)}%  sig ${(signal * 100).toFixed(0)}%`;
+  const ok = decoded && decoded.rejected == null;
   paintWave(ok);
 
-  if (contrast < 0.1) {
-    setState("NO CONTRAST", "bad");
-    frameLine.textContent = "Symbol —";
+  if (contrast < 0.08 && mode === "AUTO") {
+    setState("AUTO — SEARCHING", "search");
+    frameLine.textContent = "Payload —";
     return;
   }
 
   if (ok) {
-    const hex = (decoded.payload ?? cfg.payload).toString(16).toUpperCase().padStart(2, "0");
-    setState("RAW MATCH", "ok");
-    frameLine.textContent = `SYMBOL ${hex}`;
+    const hex = decoded.payload.toString(16).toUpperCase().padStart(2, "0");
+    const st = decoded.stationId != null
+      ? decoded.stationId.toString(16).toUpperCase().padStart(4, "0")
+      : "----";
+    setState(mode === "LOCKED" ? "LOCKED · RECEIVED" : "SIGNAL FOUND", "ok");
+    frameLine.textContent = `PAYLOAD ${hex}`;
     recBody.textContent = [
-      `STAGE    ${cfg.stage}`,
-      `RAW      ${expectBits}`,
-      `SYMBOL   ${hex}`,
-      decoded.stationId != null ? `STATION  ${decoded.stationId.toString(16).toUpperCase().padStart(4, "0")}` : null,
+      `STATION  ${st}`,
       decoded.sequence != null ? `SEQ      ${decoded.sequence}` : null,
-      `CLOCK    ${Math.round(period || cfg.symbolMs)}ms`,
+      `PAYLOAD  ${hex}`,
+      `CLOCK    ${Math.round(period)}ms`,
+      `MODE     ${mode}`,
     ].filter(Boolean).join("\n");
-    if (hex !== lastHit) {
-      lastHit = hex;
+    if (hex !== lastPayload) {
+      lastPayload = hex;
       banner.hidden = false;
-      banner.textContent = `RAW ${expectBits}  SYM ${hex}`;
+      banner.textContent = `RECEIVED ${hex}`;
       pulse();
-      log(`MATCH ${expectBits} = ${hex}`);
+      log(`RX ${st} payload ${hex}`);
       clearTimeout(apply._t);
       apply._t = setTimeout(() => {
         banner.hidden = true;
-      }, 1800);
+      }, 1600);
     }
     return;
   }
 
-  setState(decoded.preamble ? "PREAMBLE" : "LISTENING", "search");
-  frameLine.textContent = decoded.rejected || "waiting for pattern";
+  if (decoded?.preamble || decoded?.clock?.i >= 0) {
+    setState(mode === "LOCKED" ? "LOCKED · CLOCK" : "SIGNAL FOUND", "search");
+    frameLine.textContent = decoded.rejected || "sync";
+    return;
+  }
+
+  setState(mode === "LOCKED" ? "LOCKED" : "AUTO — SEARCHING", mode === "LOCKED" ? "ok" : "search");
+  frameLine.textContent = decoded?.rejected || "listening";
 }
 
 function sampleFrame() {
@@ -175,29 +167,39 @@ function sampleFrame() {
     workCtx.fillStyle = "#000";
     workCtx.fillRect(0, 0, work.width, work.height);
     const scale = Math.min(work.width / sw, work.height / sh);
-    workCtx.drawImage(
-      video,
-      (work.width - sw * scale) / 2,
-      (work.height - sh * scale) / 2,
-      sw * scale,
-      sh * scale,
-    );
+    workCtx.drawImage(video, (work.width - sw * scale) / 2, (work.height - sh * scale) / 2, sw * scale, sh * scale);
     const image = workCtx.getImageData(0, 0, work.width, work.height);
-    const spot = lockSpot(image);
-    const value = sampleRegion(image, spot.x, spot.y, spot.w, spot.h);
+    const grid = cellGrid(image);
+    history.push(grid);
+    if (history.length > 18) history.shift();
+    const cand = scoreCells(history);
+    if (mode === "AUTO" && cand) {
+      aim.nx = aim.nx * 0.7 + cand.nx * 0.3;
+      aim.ny = aim.ny * 0.7 + cand.ny * 0.3;
+    }
+    const spot = { x: aim.nx * work.width, y: aim.ny * work.height, w: 40, h: 40 };
+    const value = sampleRegion(image, spot.x, spot.y, 40, 40);
     series.push(performance.now(), value);
     const st = recentStats(series);
-    const period = estimateSymbolMs(series.samples) || cfg.symbolMs;
-    const bits = sliceRaw(series.samples, period);
-    paintOverlay(spot, bits.join("").includes(expectBits));
-    apply(bits, period, value, st.contrast);
+    const period = estimateClockMs(series.samples) || cfg.symbolMs;
+    const hit = correlateStart(series.samples, period, CLOCK_TRAIN);
+    let bits = [];
+    let decoded = { rejected: "no-clock" };
+    if (hit.score >= 0.28) {
+      bits = sliceFrom(series.samples, hit.t, period, 64);
+      decoded = decodeBits(bits, cfg.stage);
+    } else {
+      bits = sliceFrom(series.samples, series.samples[0]?.t || 0, period, 32);
+    }
+    paintOverlay(spot, hit.score >= 0.28);
+    apply(decoded, bits, period, value, st.contrast, cand?.score || 0);
   }
   requestAnimationFrame(sampleFrame);
 }
 
 async function startCamera() {
   running = true;
-  modeLabel.textContent = `stage ${cfg.stage} · want ${expectBits}`;
+  setMode("AUTO");
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: false,
     video: {
@@ -210,7 +212,7 @@ async function startCamera() {
   video.srcObject = stream;
   video.setAttribute("playsinline", "true");
   await video.play();
-  log("camera open — tracking brightest region");
+  log("camera open");
   sampleFrame();
 }
 
@@ -220,7 +222,13 @@ overlay.addEventListener("pointerdown", (ev) => {
     nx: Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width)),
     ny: Math.min(1, Math.max(0, (ev.clientY - r.top) / r.height)),
   };
-  tapUntil = performance.now() + 2000;
+  setMode("LOCKED");
+  log(`LOCKED ${(aim.nx * 100).toFixed(0)},${(aim.ny * 100).toFixed(0)}`);
+});
+
+unlockBtn.addEventListener("click", () => {
+  setMode("AUTO");
+  log("AUTO");
 });
 
 document.getElementById("cam").addEventListener("click", () => {
@@ -232,7 +240,7 @@ document.getElementById("cam").addEventListener("click", () => {
 
 document.getElementById("clear").addEventListener("click", () => {
   series.samples.length = 0;
-  lastHit = "";
+  lastPayload = null;
   logEl.textContent = "";
   recBody.textContent = "none yet";
   banner.hidden = true;
