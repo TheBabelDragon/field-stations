@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#080812" />
+  <title>FIELD STATION decoder</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="decode">
+  <video id="stage" playsinline muted></video>
+  <canvas id="overlay"></canvas>
+  <div id="virtual-led" aria-hidden="true"></div>
+
+  <header class="hud">
+    <p class="kicker">FIELD STATION <span id="station-label">----</span></p>
+    <p class="lede" id="mode-label">QR bootstrap · single-LED channel</p>
+  </header>
+
+  <aside class="hud">
+    <h2 id="listen-state">SEARCHING FOR LED</h2>
+    <div class="meter">Signal<div class="bar"><i id="sig-bar"></i></div></div>
+    <div class="meter" id="sync-line">Sync —</div>
+    <div class="meter" id="frame-line">Frame —</div>
+    <div class="meter" id="ecc-line">ECC —</div>
+    <p class="status dim" id="diag">waiting</p>
+    <div class="log" id="log"></div>
+  </aside>
+
+  <div class="hud-bar">
+    <button type="button" id="cam" class="primary">CAMERA</button>
+    <button type="button" id="virt">VIRTUAL LED</button>
+    <button type="button" id="clear">CLEAR</button>
+  </div>
+
+  <footer class="hud">
+    <a href="index.html">bootstrap</a>
+    <span id="footer-note">camera stays on device</span>
+  </footer>
+
+  <script type="module" src="decoder.js"></script>
+</body>
+</html>

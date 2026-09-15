@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#080812" />
+  <title>field-stations</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <p class="kicker">TheBabelDragon · field-stations</p>
+    <h1>QR bootstrap.<br />LED is live data.</h1>
+    <p class="lede">
+      The printed QR only answers: what am I looking at, and where do I listen?
+      The single LED is the continuously changing optical channel.
+      This page is the decoder. The camera data stays on the phone.
+    </p>
+
+    <div class="card">
+      <h2>START HERE</h2>
+      <p class="lede">Scan the station QR, or open the decoder directly.</p>
+      <div class="row">
+        <a href="decode.html?station=7F29&amp;v=1&amp;sym=80"><button class="primary">OPEN DECODER 7F29</button></a>
+        <a href="decode.html"><button>OPEN DECODER</button></a>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>BOOTSTRAP URL</h2>
+      <pre id="boot">https://thebabeldragon.github.io/field-stations/decode.html?station=7F29&amp;v=1&amp;sym=80</pre>
+      <p class="lede">Print that as an ordinary QR. Keep the LED inside or next to the code. The URL stays still while station state moves.</p>
+    </div>
+
+    <div class="card">
+      <h2>PHASES</h2>
+      <pre>1  fake station — known HELLO packets
+2  RFID observation as live payload
+3  Field OS admission
+4  QR geometry as spatial frame
+5  Canonsphere witness</pre>
+    </div>
+
+    <p class="lede" style="margin-top:28px">
+      <a href="https://github.com/TheBabelDragon/field-stations">source</a>
+      ·
+      <a href="https://github.com/TheBabelDragon/field-os">field-os</a>
+      ·
+      <a href="https://github.com/TheBabelDragon/canonsphere">canonsphere</a>
+    </p>
+  </div>
+</body>
+</html>
