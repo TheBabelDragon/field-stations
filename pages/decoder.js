@@ -15,6 +15,7 @@ const frameLine = document.getElementById("frame-line");
 const eccLine = document.getElementById("ecc-line");
 const diag = document.getElementById("diag");
 const logEl = document.getElementById("log");
+const recBody = document.getElementById("rec-body");
 const video = document.getElementById("stage");
 const overlay = document.getElementById("overlay");
 const virtLed = document.getElementById("virtual-led");
@@ -27,7 +28,7 @@ stationLabel.textContent = cfg.stationParam && cfg.stationParam !== "0000"
   ? cfg.stationParam.toUpperCase()
   : "----";
 
-const series = new TimeSeries(10000);
+const series = new TimeSeries(8000);
 const work = document.createElement("canvas");
 const workCtx = work.getContext("2d", { willReadFrequently: true });
 const overCtx = overlay.getContext("2d");
@@ -45,9 +46,6 @@ let virtIndex = 0;
 let virtLast = 0;
 let aim = { nx: 0.5, ny: 0.5 };
 let tapUntil = 0;
-let holdUntil = 0;
-let holdScore = 0;
-let sawSync = false;
 let audioCtx = null;
 
 function log(line) {
@@ -69,24 +67,33 @@ function pulse(freq) {
     o.frequency.value = freq;
     o.connect(g);
     g.connect(audioCtx.destination);
-    g.gain.value = 0.06;
+    g.gain.value = 0.07;
     o.start();
-    o.stop(audioCtx.currentTime + 0.12);
+    o.stop(audioCtx.currentTime + 0.14);
   } catch { /* ignore */ }
-  navigator.vibrate?.([30, 40, 70]);
+  navigator.vibrate?.([40, 40, 90]);
 }
 
-function celebrate(desc) {
+function showRecovered(desc, frame) {
+  const hello = desc.hello || new TextDecoder().decode(frame.payload || new Uint8Array());
+  recBody.textContent = [
+    `station  ${desc.station}`,
+    `seq      ${frame.sequence}`,
+    `type     ${desc.type}`,
+    `msg      ${hello || desc.payload_hex.slice(0, 16)}`,
+    `phy      ${frame.phy}`,
+    `crc      ok`,
+  ].join("\n");
   banner.hidden = false;
-  banner.textContent = `LOOP CLOSED · ${desc.type} #${desc.sequence}`;
+  banner.textContent = `RECOVERED · ${desc.station} #${frame.sequence} · ${hello || desc.type}`;
   pulse(1174);
-  clearTimeout(celebrate._t);
-  celebrate._t = setTimeout(() => {
+  clearTimeout(showRecovered._t);
+  showRecovered._t = setTimeout(() => {
     banner.hidden = true;
-  }, 2600);
+  }, 2200);
 }
 
-function paintWave(score) {
+function paintWave(score, recovered) {
   const w = wave.width;
   const h = wave.height;
   waveCtx.fillStyle = "#10101c";
@@ -94,7 +101,7 @@ function paintWave(score) {
   const slice = series.samples.slice(-160);
   if (slice.length < 2) return;
   waveCtx.beginPath();
-  waveCtx.strokeStyle = score >= 0.24 ? "#7dffb2" : "#7ee7ff";
+  waveCtx.strokeStyle = recovered ? "#7dffb2" : score >= 0.28 ? "#ffd37e" : "#7ee7ff";
   waveCtx.lineWidth = 1.5;
   slice.forEach((s, i) => {
     const x = (i / (slice.length - 1)) * w;
@@ -105,15 +112,15 @@ function paintWave(score) {
   waveCtx.stroke();
 }
 
-function paintOverlay(spot, locked) {
+function paintOverlay(spot, recovered) {
   overlay.width = overlay.clientWidth * devicePixelRatio;
   overlay.height = overlay.clientHeight * devicePixelRatio;
   overCtx.clearRect(0, 0, overlay.width, overlay.height);
   if (!spot) return;
   const x = spot.x * overlay.width / work.width;
   const y = spot.y * overlay.height / work.height;
-  overCtx.strokeStyle = locked ? "rgba(125,255,178,0.95)" : "rgba(126,231,255,0.95)";
-  overCtx.lineWidth = locked ? 3 : 2;
+  overCtx.strokeStyle = recovered ? "rgba(125,255,178,0.95)" : "rgba(126,231,255,0.85)";
+  overCtx.lineWidth = recovered ? 3 : 2;
   overCtx.strokeRect(x - 28, y - 28, 56, 56);
 }
 
@@ -157,62 +164,50 @@ function blinkCell() {
 
 function applyDecode(decoded, brightness, st) {
   const contrast = st.contrast ?? 0;
-  let score = decoded.score || 0;
-  const now = performance.now();
-  if (score >= 0.24) {
-    holdUntil = now + 1400;
-    holdScore = score;
-    if (!sawSync) {
-      sawSync = true;
-      pulse(880);
-      log("sync held");
-    }
-  } else if (now < holdUntil) {
-    score = holdScore;
-    decoded = { ...decoded, preamble: true, score: holdScore };
-  } else {
-    sawSync = false;
-  }
+  const score = decoded.score || 0;
+  const recovered = !!(decoded.frame && decoded.rejected == null);
 
   sigBar.style.width = `${Math.round(Math.max(0, Math.min(1, brightness)) * 100)}%`;
   conBar.style.width = `${Math.round(Math.max(0, Math.min(1, contrast / 0.4)) * 100)}%`;
-  paintWave(score);
+  paintWave(score, recovered);
   diag.textContent = `${(brightness * 100).toFixed(0)}%  con ${(contrast * 100).toFixed(0)}%  corr ${score.toFixed(2)}  ${Math.round(decoded.symbolMs || cfg.symbolMs)}ms`;
 
-  if (decoded.frame) {
+  if (recovered) {
     const desc = describeFrame(decoded.frame);
-    setState("LOOP CLOSED", "ok");
-    syncLine.textContent = `Sync ✓ corr ${score.toFixed(2)}`;
-    frameLine.textContent = `Frame ${desc.type} #${decoded.frame.sequence}`;
+    setState("RECOVERED", "ok");
+    syncLine.textContent = `Authenticated  corr ${score.toFixed(2)}`;
+    frameLine.textContent = `${desc.type} #${decoded.frame.sequence}`;
     eccLine.textContent = `${decoded.frame.phy} CRC ok`;
     if (decoded.frame.sequence !== lastSeq) {
       lastSeq = decoded.frame.sequence;
-      celebrate(desc);
-      log(`LOOP ${desc.station} ${desc.type} #${decoded.frame.sequence}`);
+      showRecovered(desc, decoded.frame);
+      log(`RECOVERED ${desc.station} ${desc.type} #${decoded.frame.sequence} ${desc.hello || ""}`);
     }
     return;
   }
-  if (decoded.preamble || score >= 0.24) {
-    setState("SYNC FOUND", "ok");
-    syncLine.textContent = `Sync ✓ corr ${score.toFixed(2)}`;
-    frameLine.textContent = `Frame ${decoded.bitsHave || 0}/${decoded.bitsNeed || 32}`;
-    eccLine.textContent = "hold still — packet follows";
+
+  if (decoded.preamble || score >= 0.28) {
+    setState("PREAMBLE CANDIDATE", "search");
+    syncLine.textContent = `Candidate only  corr ${score.toFixed(2)}`;
+    frameLine.textContent = `${decoded.bitsHave || 0}/${decoded.bitsNeed || 32}  ${decoded.rejected || "collecting"}`;
+    eccLine.textContent = "CRC not ok yet";
     return;
   }
+
   if (mode === "camera" && contrast < 0.08) {
     setState("NO CONTRAST", "bad");
-    syncLine.textContent = "Sync — aim at the disc";
+    syncLine.textContent = "Aim at the disc";
     return;
   }
   if (contrast >= 0.08) {
     setState(STATE.SEARCHING, "search");
-    syncLine.textContent = `Sync searching  corr ${score.toFixed(2)}`;
+    syncLine.textContent = `Searching  corr ${score.toFixed(2)}`;
     frameLine.textContent = "Frame --";
-    eccLine.textContent = "ECC --";
+    eccLine.textContent = "CRC --";
     return;
   }
   setState(STATE.NO_SIGNAL, "dim");
-  syncLine.textContent = "Sync —";
+  syncLine.textContent = "No candidate";
 }
 
 function sampleCanvasSource(source, sw, sh) {
@@ -245,7 +240,7 @@ function sampleCanvasSource(source, sw, sh) {
   series.push(performance.now(), value);
   const st = recentStats(series);
   const decoded = decodeFromSeries(series, cfg.symbolMs);
-  paintOverlay(spot, decoded.preamble || decoded.score >= 0.24 || performance.now() < holdUntil);
+  paintOverlay(spot, !!(decoded.frame && decoded.rejected == null));
   applyDecode(decoded, value, st);
 }
 
@@ -259,20 +254,20 @@ async function startCamera() {
   stopVirtual();
   mode = "camera";
   document.body.classList.remove("virtual");
-  modeLabel.textContent = `camera · ${cfg.symbolMs}ms · auto-aims at blink`;
+  modeLabel.textContent = `camera · ${cfg.symbolMs}ms/symbol · CRC is the lock`;
   stream = await navigator.mediaDevices.getUserMedia({
     audio: false,
     video: {
       facingMode: { ideal: "environment" },
       width: { ideal: 1280 },
       height: { ideal: 720 },
-      frameRate: { ideal: 30 },
+      frameRate: { ideal: 60 },
     },
   });
   video.srcObject = stream;
   video.setAttribute("playsinline", "true");
   await video.play();
-  log("camera open — hold the disc in view");
+  log("camera open — recovered means CRC matched");
   cameraLoop();
 }
 
@@ -298,7 +293,7 @@ function startVirtual() {
   virtIndex = 0;
   virtLast = performance.now();
   series.samples.length = 0;
-  log("self test. Real loop = transmitter + CAMERA.");
+  log("self test should print RECOVERED + HI");
   const step = (now) => {
     if (mode !== "virtual") return;
     if (now - virtLast >= cfg.symbolMs) {
@@ -326,7 +321,6 @@ overlay.addEventListener("pointerdown", (ev) => {
     ny: Math.min(1, Math.max(0, (ev.clientY - r.top) / r.height)),
   };
   tapUntil = performance.now() + 2500;
-  log(`aim ${(aim.nx * 100).toFixed(0)},${(aim.ny * 100).toFixed(0)}`);
 });
 
 document.getElementById("cam").addEventListener("click", () => {
@@ -339,8 +333,8 @@ document.getElementById("virt").addEventListener("click", startVirtual);
 document.getElementById("clear").addEventListener("click", () => {
   series.samples.length = 0;
   lastSeq = -1;
-  sawSync = false;
   logEl.textContent = "";
+  if (recBody) recBody.textContent = "none yet — candidate is not a message";
   banner.hidden = true;
 });
 

@@ -11,26 +11,29 @@
   <div class="wrap">
     <p class="kicker">TheBabelDragon · field-stations</p>
     <h1>QR bootstrap.<br />LED is live data.</h1>
-    <p class="lede">Computer transmits. Phone decodes. Same station. Same symbol period.</p>
+    <p class="lede">A candidate preamble is not a message. Recovered means CRC matched and the payload is on screen.</p>
 
     <div class="card">
       <h2>LIVE LOOP</h2>
-      <p class="lede">Hard-refresh both pages first. Then:</p>
-      <p class="lede">1. Computer: transmitter, fullscreen, brightness up.</p>
-      <p class="lede">2. Phone: decoder → CAMERA → tap the white disc → hold still.</p>
-      <p class="lede">Waveform must bounce. Contrast &gt; 10%. corr climbs. SYNC ✓. Then LOOP CLOSED (~15s).</p>
+      <p class="lede">Computer transmits. Phone decodes. Same <code>sym=50</code>.</p>
+      <p class="lede">Look for LAST RECOVERED: station 7F29, seq, msg HI, crc ok.</p>
       <div class="row">
-        <a href="tx.html?station=7F29&amp;v=1&amp;sym=200&amp;phy=demo"><button class="primary">TRANSMITTER</button></a>
-        <a href="decode.html?station=7F29&amp;v=1&amp;sym=200"><button class="primary">DECODER</button></a>
-        <a href="decode.html?station=7F29&amp;v=1&amp;sym=200&amp;demo=1"><button>SELF TEST</button></a>
+        <a href="tx.html?station=7F29&amp;v=1&amp;sym=50"><button class="primary">TRANSMITTER</button></a>
+        <a href="decode.html?station=7F29&amp;v=1&amp;sym=50"><button class="primary">DECODER</button></a>
+        <a href="decode.html?station=7F29&amp;v=1&amp;sym=50&amp;demo=1"><button>SELF TEST</button></a>
       </div>
+    </div>
+
+    <div class="card">
+      <h2>RATE</h2>
+      <p class="lede">Phone camera + screen tops out around 20 baud. 50ms/symbol is already aggressive. Kilobaud needs a photodiode, not a camera.</p>
     </div>
 
     <div class="card">
       <h2>TARGET</h2>
       <p class="lede"><a href="https://thebabeldragon.github.io/field-stations/">https://thebabeldragon.github.io/field-stations/</a></p>
-      <p class="lede"><a href="https://thebabeldragon.github.io/field-stations/tx.html?station=7F29&amp;v=1&amp;sym=200&amp;phy=demo">tx.html?station=7F29&amp;sym=200</a></p>
-      <p class="lede"><a href="https://thebabeldragon.github.io/field-stations/decode.html?station=7F29&amp;v=1&amp;sym=200">decode.html?station=7F29&amp;sym=200</a></p>
+      <p class="lede"><a href="https://thebabeldragon.github.io/field-stations/tx.html?station=7F29&amp;v=1&amp;sym=50">tx.html?sym=50</a></p>
+      <p class="lede"><a href="https://thebabeldragon.github.io/field-stations/decode.html?station=7F29&amp;v=1&amp;sym=50">decode.html?sym=50</a></p>
     </div>
   </div>
 </body>

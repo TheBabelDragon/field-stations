@@ -3,7 +3,7 @@ import { parseBootstrap } from "./station/station-config.js";
 
 const cfg = parseBootstrap();
 const stationId = cfg.stationId || 0x7f29;
-const symbolMs = Math.max(120, cfg.symbolMs || 200);
+const symbolMs = Math.max(16, cfg.symbolMs || 50);
 
 document.getElementById("station-label").textContent = stationId.toString(16).toUpperCase().padStart(4, "0");
 
@@ -13,14 +13,15 @@ const frameEl = document.getElementById("tx-frame");
 const meta = document.getElementById("tx-meta");
 
 function pack(seq) {
-  return [...encodeLiteFrame({ stationId, sequence: seq }), ...Array(6).fill(0)];
+  return [...encodeLiteFrame({ stationId, sequence: seq }), ...Array(4).fill(0)];
 }
 
 let seq = 1;
 let symbols = pack(seq);
 let index = 0;
 let last = performance.now();
-meta.textContent = `lite PHY · ${symbolMs}ms · ${symbols.length} symbols · tap for fullscreen`;
+const baud = (1000 / symbolMs).toFixed(0);
+meta.textContent = `lite PHY · ${symbolMs}ms · ${baud} baud · ${symbols.length} symbols · tap fullscreen`;
 
 function tick(now) {
   if (now - last >= symbolMs) {
