@@ -10,11 +10,11 @@
 <body class="decode">
   <video id="stage" playsinline muted autoplay></video>
   <canvas id="overlay"></canvas>
-  <div id="loop-banner" hidden>RECOVERED</div>
+  <div id="loop-banner" hidden>PACKET OK</div>
 
   <header class="hud">
     <p class="kicker">FIELD STATION <span id="station-label">----</span></p>
-    <p class="lede" id="mode-label">camera decoder</p>
+    <p class="lede" id="mode-label">optical receiver</p>
   </header>
 
   <aside class="hud">
@@ -26,10 +26,10 @@
     <div class="meter" id="frame-line">Frame —</div>
     <div class="meter" id="ecc-line">Vote —</div>
     <div class="recovered" id="recovered">
-      <p class="kicker">LAST RECOVERED</p>
-      <pre id="rec-body">none — point at the computer disc</pre>
+      <p class="kicker">COMMITTED PACKET</p>
+      <pre id="rec-body">none yet</pre>
     </div>
-    <p class="status dim" id="diag">the test is the camera</p>
+    <p class="status dim" id="diag">camera is the instrument</p>
     <div class="log" id="log"></div>
   </aside>
 
@@ -39,8 +39,8 @@
   </div>
 
   <footer class="hud">
-    <a href="tx.html?station=7F29&amp;frames=4">transmitter</a>
-    <span id="footer-note">recovered seq must match the screen</span>
+    <a href="tx.html?station=7F29&amp;sym=67">transmitter</a>
+    <span id="footer-note">commit = CRC ok + vote</span>
   </footer>
 
   <script type="module" src="decoder.js"></script>

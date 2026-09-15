@@ -10,15 +10,14 @@
 <body class="tx">
   <div id="tx-led" aria-hidden="true"></div>
   <header class="tx-hud">
-    <p class="kicker">TRANSMIT · STATION <span id="station-label">7F29</span></p>
-    <p class="lede" id="tx-meta">vsync PHY</p>
+    <p class="kicker">OPTICAL PACKET</p>
+    <p class="lede" id="tx-meta">station | seq | symbol | type</p>
   </header>
-  <p id="tx-seq">1</p>
-  <p id="tx-bit">0</p>
-  <p id="tx-hint">Tap for fullscreen. Phone camera on the disc. Recovered seq should match this number.</p>
+  <p id="tx-packet">7F29 | 0001 | 67 | 01</p>
+  <p id="tx-hint">Tap fullscreen. Phone camera on the disc. The disc is the packet.</p>
   <footer class="tx-hud">
     <span id="tx-frame">idle</span>
-    <a href="decode.html?station=7F29&amp;v=1&amp;sym=67">decoder</a>
+    <a href="decode.html?station=7F29&amp;sym=67">decoder</a>
   </footer>
   <script type="module" src="tx.js"></script>
 </body>

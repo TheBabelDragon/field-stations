@@ -1,37 +1,50 @@
-import { encodeLiteFrame } from "./optical/lite.js";
+import { encodePacket, TYPE, formatPacket } from "./optical/packet.js";
 import { parseBootstrap } from "./station/station-config.js";
 
 const cfg = parseBootstrap();
-const stationId = cfg.stationId || 0x7f29;
-const framesPerSymbol = Math.max(3, Number(new URLSearchParams(location.search).get("frames") || 4));
-const symbolMs = Math.round(framesPerSymbol * (1000 / 60));
+const stationId = cfg.stationId;
+const payload = cfg.payload;
+const framesPerSymbol = cfg.frames;
+const repeats = Math.max(2, Number(new URLSearchParams(location.search).get("rep") || 3));
 
-document.getElementById("station-label").textContent = stationId.toString(16).toUpperCase().padStart(4, "0");
+document.getElementById("station-label").textContent = cfg.stationParam;
 
 const led = document.getElementById("tx-led");
-const bitEl = document.getElementById("tx-bit");
-const frameEl = document.getElementById("tx-frame");
 const meta = document.getElementById("tx-meta");
-const seqEl = document.getElementById("tx-seq");
+const frameEl = document.getElementById("tx-frame");
+const pktEl = document.getElementById("tx-packet");
 
 function pack(seq) {
-  return [...encodeLiteFrame({ sequence: seq }), 0, 0, 0, 0];
+  return encodePacket({
+    stationId,
+    sequence: seq,
+    type: TYPE.SYMBOL,
+    payload,
+  });
 }
 
 let seq = 1;
+let copies = 0;
 let symbols = pack(seq);
 let index = 0;
 let frameCount = 0;
-let bit = 0;
 
-meta.textContent = `${framesPerSymbol} frames/symbol · ~${symbolMs}ms · vsync · tap fullscreen`;
+function renderLabel() {
+  const view = formatPacket({
+    stationId,
+    sequence: seq,
+    type: TYPE.SYMBOL,
+    typeName: "SYMBOL",
+    payload,
+  });
+  pktEl.textContent = `${view.st} | ${view.seq} | ${view.sym} | ${view.typ}`;
+  meta.textContent = `${framesPerSymbol} frames/bit · payload ${cfg.payloadHex} · ${repeats}x · tap fullscreen`;
+  frameEl.textContent = `copy ${copies + 1}/${repeats}  bit ${index + 1}/${symbols.length}`;
+}
 
 function applyBit() {
-  bit = symbols[index];
-  led.classList.toggle("on", bit === 1);
-  bitEl.textContent = bit ? "1" : "0";
-  if (seqEl) seqEl.textContent = String(seq);
-  frameEl.textContent = `SEQ ${seq}  ${index + 1}/${symbols.length}`;
+  led.classList.toggle("on", symbols[index] === 1);
+  renderLabel();
 }
 
 applyBit();
@@ -41,9 +54,13 @@ function tick() {
   if (frameCount % framesPerSymbol === 0) {
     index += 1;
     if (index >= symbols.length) {
-      seq = seq >= 99 ? 1 : seq + 1;
-      symbols = pack(seq);
+      copies += 1;
       index = 0;
+      if (copies >= repeats) {
+        copies = 0;
+        seq = seq >= 255 ? 1 : seq + 1;
+        symbols = pack(seq);
+      }
     }
     applyBit();
   }
