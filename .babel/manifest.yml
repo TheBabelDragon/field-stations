@@ -8,10 +8,14 @@ identity:
   version: "0.1.0"
 purpose: >
   Physical Field OS terminal: RFID as input, a single LED as a coherent
-  optical transmitter, Field OS as the event/state layer. Canonsphere
-  remains a downstream witness.
+  optical transmitter, Field OS as the event/state layer. GitHub Pages
+  is the camera decoder. Canonsphere remains a downstream witness.
 status: experimental
 entrypoints:
+  - kind: pages
+    path: pages/index.html
+  - kind: pages
+    path: pages/decode.html
   - kind: cli
     command: python3 -m simulator.virtual_station
     output: json
@@ -35,6 +39,7 @@ capabilities:
   - encode-optical-frame
   - decode-optical-frame
   - virtual-station-loop
+  - pages-optical-decoder
 operations:
-  safe: [encode-optical-frame, decode-optical-frame, virtual-station-loop]
+  safe: [encode-optical-frame, decode-optical-frame, virtual-station-loop, pages-optical-decoder]
   mutation: []
