@@ -1,18 +1,24 @@
-/** Short demo packet: station + seq + crc8. Fast enough to close the live loop. */
+/** Screen-camera PHY: preamble + sequence sent three times. 2-of-3 vote is the lock. */
 
-import { crc16Ccitt } from "./ecc.js";
-import { LEAD_IN, PREAMBLE, bytesToBits, bitsToBytes, findPreamble } from "./frame.js";
+import { LEAD_IN, PREAMBLE, findPreamble } from "./frame.js";
 
-export const LITE_BODY_BITS = 32;
+export const LITE_BODY_BITS = 24;
 
-export function encodeLiteFrame({ stationId, sequence }) {
-  const body = Uint8Array.from([
-    (stationId >> 8) & 0xff,
-    stationId & 0xff,
-    sequence & 0xff,
-  ]);
-  const crc = crc16Ccitt(body) & 0xff;
-  return [...LEAD_IN, ...PREAMBLE, ...bytesToBits(body), ...bytesToBits(Uint8Array.from([crc]))];
+export function byteToBits(value) {
+  const bits = [];
+  for (let i = 7; i >= 0; i--) bits.push((value >> i) & 1);
+  return bits;
+}
+
+export function bitsToByte(bits) {
+  let value = 0;
+  for (let i = 0; i < 8; i++) value = (value << 1) | (bits[i] & 1);
+  return value;
+}
+
+export function encodeLiteFrame({ sequence }) {
+  const seqBits = byteToBits(sequence & 0xff);
+  return [...LEAD_IN, ...PREAMBLE, ...seqBits, ...seqBits, ...seqBits];
 }
 
 export function decodeLiteSymbols(symbols) {
@@ -22,20 +28,28 @@ export function decodeLiteSymbols(symbols) {
   if (bits.length < LITE_BODY_BITS) {
     return { frame: null, rejected: "frame-short", preamble: true, start };
   }
-  const body = bitsToBytes(bits.slice(0, 24));
-  const crc = bitsToBytes(bits.slice(24, 32))[0];
-  if ((crc16Ccitt(body) & 0xff) !== crc) {
-    return { frame: null, rejected: "crc-mismatch", preamble: true, start };
+  const voted = [];
+  let agrees = 0;
+  for (let i = 0; i < 8; i++) {
+    const s = (bits[i] | 0) + (bits[8 + i] | 0) + (bits[16 + i] | 0);
+    const bit = s >= 2 ? 1 : 0;
+    voted.push(bit);
+    if (bits[i] === bits[8 + i] && bits[8 + i] === bits[16 + i]) agrees += 1;
   }
+  if (agrees < 5) {
+    return { frame: null, rejected: "vote-fail", preamble: true, start };
+  }
+  const sequence = bitsToByte(voted);
   return {
     frame: {
       version: 1,
-      stationId: (body[0] << 8) | body[1],
-      sequence: body[2],
+      stationId: 0,
+      sequence,
       messageType: 0,
-      payload: new TextEncoder().encode("HI"),
-      recovered: false,
-      phy: "lite",
+      payload: new TextEncoder().encode(String(sequence)),
+      recovered: true,
+      phy: "lite3",
+      agrees,
     },
     rejected: null,
     preamble: true,
