@@ -20,7 +20,7 @@ html, body {
   color: var(--text);
   font-family: var(--sans);
 }
-body.decode { overflow: hidden; height: 100%; }
+body.decode, body.tx { overflow: hidden; height: 100%; }
 .kicker {
   margin: 0;
   font-family: var(--mono);
@@ -73,16 +73,16 @@ button:hover { border-color: var(--accent); }
   inset: 0;
   width: 100%;
   height: 100%;
-  pointer-events: none;
+  pointer-events: auto;
 }
 header.hud, aside.hud, footer.hud, .hud-bar {
   position: fixed;
   z-index: 4;
-  pointer-events: none;
 }
 header.hud {
   top: max(14px, env(safe-area-inset-top));
   left: max(16px, env(safe-area-inset-left));
+  pointer-events: none;
 }
 aside.hud {
   top: max(14px, env(safe-area-inset-top));
@@ -104,6 +104,7 @@ aside.hud h2 {
 .meter { margin: 8px 0; font-family: var(--mono); font-size: 11px; color: var(--dim); }
 .bar { height: 7px; background: #1a1a32; margin-top: 4px; }
 .bar i { display: block; height: 100%; width: 0; background: var(--cyan); }
+#wave { width: 100%; height: 36px; margin: 8px 0; background: #10101c; }
 .status { font-family: var(--mono); font-size: 12px; letter-spacing: 0.12em; margin: 10px 0 0; }
 .status.search { color: var(--warn); }
 .status.ok { color: var(--ok); }
@@ -111,7 +112,7 @@ aside.hud h2 {
 .status.dim { color: var(--dim); }
 .log {
   margin: 10px 0 0;
-  max-height: 28vh;
+  max-height: 22vh;
   overflow: auto;
   font-family: var(--mono);
   font-size: 10px;
@@ -135,14 +136,15 @@ footer.hud {
   font-family: var(--mono);
   font-size: 11px;
   color: var(--dim);
+  pointer-events: auto;
 }
 #virtual-led {
   position: fixed;
   left: 50%;
-  top: 42%;
+  top: 46%;
   transform: translate(-50%, -50%);
-  width: 72px;
-  height: 72px;
+  width: min(42vmin, 220px);
+  height: min(42vmin, 220px);
   border-radius: 50%;
   background: #110;
   box-shadow: 0 0 0 1px #333;
@@ -151,7 +153,71 @@ footer.hud {
 }
 #virtual-led.on {
   background: #fff6d5;
-  box-shadow: 0 0 28px 10px rgba(255, 230, 140, 0.85);
+  box-shadow: 0 0 48px 18px rgba(255, 230, 140, 0.9);
 }
 body.virtual #virtual-led { display: block; }
-body.virtual #stage { background: #101018; }
+body.virtual #stage { background: #050508; }
+#loop-banner {
+  position: fixed;
+  left: 50%;
+  top: 18%;
+  transform: translateX(-50%);
+  z-index: 8;
+  padding: 14px 22px;
+  background: #7dffb2;
+  color: #04140a;
+  font-family: var(--mono);
+  letter-spacing: 0.14em;
+  font-size: 16px;
+}
+body.tx { background: #000; }
+#tx-led {
+  position: fixed;
+  left: 50%;
+  top: 48%;
+  transform: translate(-50%, -50%);
+  width: min(62vmin, 420px);
+  height: min(62vmin, 420px);
+  border-radius: 50%;
+  background: #070704;
+}
+#tx-led.on {
+  background: #fffbe6;
+  box-shadow: 0 0 120px 40px rgba(255, 244, 180, 0.95);
+}
+.tx-hud {
+  position: fixed;
+  z-index: 3;
+  font-family: var(--mono);
+  color: #5a5a68;
+}
+header.tx-hud {
+  top: 16px;
+  left: 16px;
+}
+footer.tx-hud {
+  bottom: 16px;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  justify-content: space-between;
+}
+#tx-bit {
+  position: fixed;
+  right: 18px;
+  top: 16px;
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 28px;
+  color: #333;
+}
+#tx-hint {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: 48px;
+  text-align: center;
+  color: #3a3a46;
+  font-family: var(--mono);
+  font-size: 11px;
+}
