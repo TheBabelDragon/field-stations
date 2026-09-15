@@ -10,24 +10,25 @@
 <body>
   <div class="wrap">
     <p class="kicker">TheBabelDragon · field-stations</p>
-    <h1>One disc.<br />One packet.</h1>
-    <p class="lede">The camera is the instrument. <code>sym=</code> is the payload byte on the wire, not the blink rate.</p>
+    <h1>Prove one byte.</h1>
+    <p class="lede">Elapsed-time clock. Brightest-cell lock. RAW bits first. Packets later.</p>
 
     <div class="card">
-      <h2>PACKET</h2>
-      <pre>SYNC | VER | STATION | SEQ | TYPE | LEN | SYMBOL | CRC</pre>
-      <p class="lede">Same packet repeats 3×. Decoder votes. Commit at 2 matching CRC-ok frames.</p>
+      <h2>STAGE 1</h2>
+      <pre>quiet 00000000
+SYM   01100111   (67)</pre>
+      <p class="lede">Decoder should print those 8 bits. That is the only proof that matters right now.</p>
       <div class="row">
-        <a href="tx.html?station=7F29&amp;sym=67"><button class="primary">TRANSMITTER</button></a>
-        <a href="decode.html?station=7F29&amp;sym=67"><button class="primary">DECODER</button></a>
+        <a href="tx.html?station=7F29&amp;sym=67&amp;stage=1&amp;period=120"><button class="primary">TRANSMITTER</button></a>
+        <a href="decode.html?station=7F29&amp;sym=67&amp;stage=1&amp;period=120"><button class="primary">DECODER</button></a>
       </div>
     </div>
 
     <div class="card">
-      <h2>TARGET</h2>
-      <p class="lede"><a href="https://thebabeldragon.github.io/field-stations/">https://thebabeldragon.github.io/field-stations/</a></p>
-      <p class="lede"><a href="https://thebabeldragon.github.io/field-stations/tx.html?station=7F29&amp;sym=67">tx.html?station=7F29&amp;sym=67</a></p>
-      <p class="lede"><a href="https://thebabeldragon.github.io/field-stations/decode.html?station=7F29&amp;sym=67">decode.html?station=7F29&amp;sym=67</a></p>
+      <h2>LATER</h2>
+      <pre>stage=2  preamble + symbol
+stage=3  + station
+stage=4  + seq + crc</pre>
     </div>
   </div>
 </body>
