@@ -1,39 +1,7 @@
-/** Brightness timeline -> symbols. Candidate preamble is not a recovered message. */
+/** Camera brightness -> lite3 symbols. Candidate preamble is not a recovered message. */
 
-import { PREAMBLE, decodeDemoSymbols, decodeSymbols } from "./frame.js";
+import { PREAMBLE } from "./frame.js";
 import { decodeLiteSymbols, LITE_BODY_BITS } from "./lite.js";
-
-export function waveformToSymbols(samples, samplesPerSymbol, threshold = null) {
-  if (samplesPerSymbol < 1) throw new Error("samples-per-symbol");
-  if (!samples.length) return [];
-  if (threshold == null) {
-    let min = samples[0];
-    let max = samples[0];
-    for (const s of samples) {
-      if (s < min) min = s;
-      if (s > max) max = s;
-    }
-    threshold = (min + max) / 2;
-  }
-  const symbols = [];
-  for (let i = 0; i <= samples.length - samplesPerSymbol; i += samplesPerSymbol) {
-    let sum = 0;
-    for (let j = 0; j < samplesPerSymbol; j++) sum += samples[i + j];
-    symbols.push(sum / samplesPerSymbol >= threshold ? 1 : 0);
-  }
-  return symbols;
-}
-
-export function decodeWaveform(samples, samplesPerSymbol, decodeSymbolsFn, threshold = null) {
-  let last = { frame: null, rejected: "sync-not-found" };
-  for (let phase = 0; phase < samplesPerSymbol; phase++) {
-    const sliced = waveformToSymbols(samples.slice(phase), samplesPerSymbol, threshold);
-    const result = decodeSymbolsFn(sliced);
-    if (result.frame) return result;
-    last = result;
-  }
-  return last;
-}
 
 export function recentStats(series, windowMs = 1800) {
   const all = series.samples;
@@ -42,25 +10,23 @@ export function recentStats(series, windowMs = 1800) {
   const cut = t1 - windowMs;
   let min = 1;
   let max = 0;
-  let sum = 0;
   let n = 0;
   for (let i = all.length - 1; i >= 0; i--) {
     const s = all[i];
     if (s.t < cut) break;
     if (s.value < min) min = s.value;
     if (s.value > max) max = s.value;
-    sum += s.value;
     n++;
   }
   if (!n) return { min: 0, max: 0, mean: 0, variance: 0, contrast: 0 };
-  return { min, max, mean: sum / n, variance: 0, contrast: max - min };
+  return { min, max, mean: (min + max) / 2, variance: 0, contrast: max - min };
 }
 
 export function resample(series, dt = 16) {
   const s = series.samples;
   if (s.length < 2) return [];
   const t1 = s[s.length - 1].t;
-  const t0 = Math.max(s[0].t, t1 - 4000);
+  const t0 = Math.max(s[0].t, t1 - 3500);
   const out = [];
   let i = 0;
   while (i + 1 < s.length && s[i + 1].t < t0) i++;
@@ -75,7 +41,7 @@ export function resample(series, dt = 16) {
   return out;
 }
 
-export function normalizeLocal(grid, win = 36) {
+export function normalizeLocal(grid, win = 30) {
   return grid.map((p, idx) => {
     let min = 1;
     let max = 0;
@@ -123,8 +89,8 @@ export function correlatePattern(norm, symbolMs, pattern, dt) {
 export function sliceBitsFrom(norm, t0, symbolMs, nBits) {
   const bits = [];
   for (let k = 0; k < nBits; k++) {
-    const start = t0 + k * symbolMs + symbolMs * 0.28;
-    const end = t0 + k * symbolMs + symbolMs * 0.72;
+    const start = t0 + k * symbolMs + symbolMs * 0.3;
+    const end = t0 + k * symbolMs + symbolMs * 0.7;
     let sum = 0;
     let n = 0;
     for (const p of norm) {
@@ -136,65 +102,6 @@ export function sliceBitsFrom(norm, t0, symbolMs, nBits) {
     bits.push(n && sum / n >= 0 ? 1 : 0);
   }
   return bits;
-}
-
-function tryDecode(bits, score, st, rate) {
-  const symbols = [...PREAMBLE, ...bits];
-  const lite = decodeLiteSymbols(symbols);
-  if (lite.frame) {
-    return {
-      ...lite,
-      score,
-      contrast: st.contrast,
-      stats: st,
-      bitsHave: bits.length,
-      bitsNeed: LITE_BODY_BITS,
-      preamble: true,
-      recovered: true,
-      symbolMs: rate,
-    };
-  }
-  const demo = decodeDemoSymbols(symbols);
-  if (demo.frame) {
-    return {
-      ...demo,
-      score,
-      contrast: st.contrast,
-      stats: st,
-      bitsHave: bits.length,
-      bitsNeed: 88,
-      preamble: true,
-      recovered: true,
-      symbolMs: rate,
-    };
-  }
-  const full = decodeSymbols(symbols);
-  if (full.frame) {
-    return {
-      ...full,
-      score,
-      contrast: st.contrast,
-      stats: st,
-      bitsHave: bits.length,
-      bitsNeed: 200,
-      preamble: true,
-      recovered: true,
-      symbolMs: rate,
-    };
-  }
-  const rejected = [lite, demo, full].map((r) => r.rejected).find((r) => r && r !== "sync-not-found");
-  return {
-    frame: null,
-    rejected: rejected || "frame-short",
-    preamble: true,
-    recovered: false,
-    score,
-    contrast: st.contrast,
-    stats: st,
-    bitsHave: bits.length,
-    bitsNeed: LITE_BODY_BITS,
-    symbolMs: rate,
-  };
 }
 
 export function decodeFromSeries(series, symbolMs) {
@@ -216,7 +123,7 @@ export function decodeFromSeries(series, symbolMs) {
   const grid = resample(series, dt);
   if (grid.length < 16) return base;
   const norm = normalizeLocal(grid);
-  const rates = [0.9, 0.96, 1, 1.04, 1.1].map((f) => symbolMs * f);
+  const rates = [0.92, 1, 1.08].map((f) => symbolMs * f);
   let hit = { score: -1, t: 0, index: -1, width: 0, symbolMs };
   for (const rate of rates) {
     const cand = correlatePattern(norm, rate, PREAMBLE, dt);
@@ -224,23 +131,36 @@ export function decodeFromSeries(series, symbolMs) {
   }
   base.score = hit.score;
   base.symbolMs = hit.symbolMs || symbolMs;
-  if (hit.score < 0.28 || hit.index < 0) return base;
+  if (hit.score < 0.3 || hit.index < 0) return base;
 
   const rate = hit.symbolMs || symbolMs;
-  const phases = [-0.35, -0.2, -0.1, 0, 0.1, 0.2, 0.35].map((f) => rate * f);
   let best = { ...base, preamble: true, score: hit.score, rejected: "frame-short" };
-  for (const phase of phases) {
+  for (const phase of [-0.25, -0.12, 0, 0.12, 0.25].map((f) => rate * f)) {
     const bodyStart = hit.t + hit.width + phase;
     const availableMs = series.samples[series.samples.length - 1].t - bodyStart;
     const bitsHave = Math.max(0, Math.floor(availableMs / rate));
-    if (bitsHave < LITE_BODY_BITS) {
-      if (bitsHave > best.bitsHave) best.bitsHave = bitsHave;
-      continue;
+    if (bitsHave > best.bitsHave) best.bitsHave = bitsHave;
+    if (bitsHave < LITE_BODY_BITS) continue;
+    const bits = sliceBitsFrom(norm, bodyStart, rate, LITE_BODY_BITS);
+    const lite = decodeLiteSymbols([...PREAMBLE, ...bits]);
+    if (lite.frame) {
+      return {
+        ...lite,
+        score: hit.score,
+        contrast: st.contrast,
+        stats: st,
+        bitsHave: bits.length,
+        bitsNeed: LITE_BODY_BITS,
+        recovered: true,
+        symbolMs: rate,
+      };
     }
-    const bits = sliceBitsFrom(norm, bodyStart, rate, LITE_BODY_BITS + 8);
-    const result = tryDecode(bits, hit.score, st, rate);
-    if (result.frame) return result;
-    if ((result.bitsHave || 0) >= (best.bitsHave || 0)) best = result;
+    best = {
+      ...best,
+      rejected: lite.rejected || "vote-fail",
+      bitsHave,
+      preamble: true,
+    };
   }
   return best;
 }
