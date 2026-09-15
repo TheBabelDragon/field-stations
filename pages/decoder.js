@@ -1,7 +1,8 @@
 import { TimeSeries, sampleRegion } from "./optical/sampler.js";
 import { recentStats } from "./optical/demodulator.js";
-import { cellGrid, scoreCells, estimateClockMs, sliceFrom, correlateStart } from "./optical/detect.js";
-import { CLOCK_TRAIN, decodeBits } from "./optical/phy.js";
+import { cellGrid, scoreCells, holdCandidate, sliceFrom } from "./optical/detect.js";
+import { recoverClockFromTrain, recoverSync, CLOCK_SCORE_MIN } from "./optical/timing.js";
+import { decodeBits } from "./optical/phy.js";
 import { parseBootstrap } from "./station/station-config.js";
 
 const cfg = parseBootstrap();
@@ -34,8 +35,12 @@ const history = [];
 let mode = "AUTO";
 let running = false;
 let aim = { nx: 0.5, ny: 0.5 };
+let acquired = null;
+let heldAfterRx = false;
 let lastPayload = null;
+let lastClockMs = null;
 let audioCtx = null;
+let letterbox = { dx: 0, dy: 0, dw: 320, dh: 180, vw: 320, vh: 180 };
 
 function log(line) {
   logEl.textContent = `[${new Date().toISOString().slice(11, 23)}] ${line}\n` + logEl.textContent;
@@ -51,9 +56,12 @@ function setMode(next) {
   mode = next;
   unlockBtn.textContent = mode === "LOCKED" ? "UNLOCK" : "AUTO";
   lockNote.textContent = mode;
-  modeLabel.textContent = mode === "LOCKED"
-    ? `LOCKED  ${(aim.nx * 100).toFixed(0)},${(aim.ny * 100).toFixed(0)}`
-    : "AUTO — searching for a blinking disc";
+  if (mode === "AUTO") {
+    heldAfterRx = false;
+    modeLabel.textContent = "AUTO — searching for a blinking disc";
+  } else {
+    modeLabel.textContent = `LOCKED  ${(aim.nx * 100).toFixed(0)},${(aim.ny * 100).toFixed(0)}`;
+  }
 }
 
 function pulse() {
@@ -97,21 +105,40 @@ function paintOverlay(spot, ok) {
   if (!spot) return;
   const x = spot.x * overlay.width / work.width;
   const y = spot.y * overlay.height / work.height;
-  overCtx.strokeStyle = mode === "LOCKED" ? "rgba(125,255,178,0.95)" : ok ? "rgba(255,211,126,0.95)" : "rgba(126,231,255,0.8)";
+  overCtx.strokeStyle = mode === "LOCKED"
+    ? "rgba(125,255,178,0.95)"
+    : ok ? "rgba(255,211,126,0.95)" : "rgba(126,231,255,0.8)";
   overCtx.lineWidth = mode === "LOCKED" ? 3 : 2;
   overCtx.strokeRect(x - 26, y - 26, 52, 52);
 }
 
-function apply(decoded, bits, period, brightness, contrast, signal) {
+function tapToAim(clientX, clientY) {
+  const r = overlay.getBoundingClientRect();
+  const nx = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
+  const ny = Math.min(1, Math.max(0, (clientY - r.top) / r.height));
+  return { nx, ny };
+}
+
+function apply(decoded, bits, clock, brightness, contrast, signal) {
+  const period = clock?.symbolMs;
   rawLine.textContent = `RAW ${(bits.join("") || "—").slice(-32)}`;
-  syncLine.textContent = period ? `Clock ${Math.round(period)}ms` : "Clock —";
+  const clockTxt = clock && clock.score >= CLOCK_SCORE_MIN
+    ? `CLOCK ${Math.round(period)}ms  ${(clock.confidence * 100).toFixed(0)}%`
+    : "CLOCK —";
+  syncLine.textContent = clockTxt;
   sigBar.style.width = `${Math.round(Math.max(0, Math.min(1, brightness)) * 100)}%`;
   conBar.style.width = `${Math.round(Math.max(0, Math.min(1, contrast / 0.45)) * 100)}%`;
   diag.textContent = `${mode}  con ${(contrast * 100).toFixed(0)}%  sig ${(signal * 100).toFixed(0)}%`;
   const ok = decoded && decoded.rejected == null;
   paintWave(ok);
 
-  if (contrast < 0.08 && mode === "AUTO") {
+  if (mode === "LOCKED" && contrast < 0.08) {
+    setState("LOCKED · LOW SIGNAL", "bad");
+    frameLine.textContent = "ROI held";
+    return;
+  }
+
+  if (contrast < 0.08 && mode === "AUTO" && !heldAfterRx) {
     setState("AUTO — SEARCHING", "search");
     frameLine.textContent = "Payload —";
     return;
@@ -122,13 +149,16 @@ function apply(decoded, bits, period, brightness, contrast, signal) {
     const st = decoded.stationId != null
       ? decoded.stationId.toString(16).toUpperCase().padStart(4, "0")
       : "----";
-    setState(mode === "LOCKED" ? "LOCKED · RECEIVED" : "SIGNAL FOUND", "ok");
-    frameLine.textContent = `PAYLOAD ${hex}`;
+    const crc = decoded.sequence != null ? "CRC OK" : (cfg.stage >= 3 ? "CRC OK" : "—");
+    setState(mode === "LOCKED" ? "LOCKED · RECEIVED" : "ACQUIRED · RECEIVED", "ok");
+    frameLine.textContent = `RECEIVED ${hex}`;
     recBody.textContent = [
       `STATION  ${st}`,
       decoded.sequence != null ? `SEQ      ${decoded.sequence}` : null,
       `PAYLOAD  ${hex}`,
       `CLOCK    ${Math.round(period)}ms`,
+      decoded.sync ? "SYNC     OK" : null,
+      cfg.stage >= 3 ? `CRC      ${crc}` : null,
       `MODE     ${mode}`,
     ].filter(Boolean).join("\n");
     if (hex !== lastPayload) {
@@ -136,7 +166,7 @@ function apply(decoded, bits, period, brightness, contrast, signal) {
       banner.hidden = false;
       banner.textContent = `RECEIVED ${hex}`;
       pulse();
-      log(`RX ${st} payload ${hex}`);
+      log(`RX payload ${hex}${decoded.stationId != null ? " station " + st : ""}`);
       clearTimeout(apply._t);
       apply._t = setTimeout(() => {
         banner.hidden = true;
@@ -145,13 +175,25 @@ function apply(decoded, bits, period, brightness, contrast, signal) {
     return;
   }
 
-  if (decoded?.preamble || decoded?.clock?.i >= 0) {
-    setState(mode === "LOCKED" ? "LOCKED · CLOCK" : "SIGNAL FOUND", "search");
-    frameLine.textContent = decoded.rejected || "sync";
+  if (decoded?.rejected === "crc") {
+    setState(mode === "LOCKED" ? "LOCKED · CRC FAIL" : "CRC FAIL", "bad");
+    frameLine.textContent = "CRC FAIL";
     return;
   }
 
-  setState(mode === "LOCKED" ? "LOCKED" : "AUTO — SEARCHING", mode === "LOCKED" ? "ok" : "search");
+  if (decoded?.preamble || decoded?.sync || (clock && clock.score >= CLOCK_SCORE_MIN)) {
+    const label = decoded?.rejected === "no-sync" ? "CLOCK" : "SYNC";
+    setState(mode === "LOCKED" ? `LOCKED · ${label}` : label, "search");
+    frameLine.textContent = decoded?.rejected || label;
+    return;
+  }
+
+  if (mode === "LOCKED") {
+    setState(contrast < 0.08 ? "LOCKED · LOW SIGNAL" : "LOCKED", contrast < 0.08 ? "bad" : "ok");
+    frameLine.textContent = "listening";
+    return;
+  }
+  setState(acquired ? "ACQUIRED" : "AUTO — SEARCHING", "search");
   frameLine.textContent = decoded?.rejected || "listening";
 }
 
@@ -167,38 +209,53 @@ function sampleFrame() {
     workCtx.fillStyle = "#000";
     workCtx.fillRect(0, 0, work.width, work.height);
     const scale = Math.min(work.width / sw, work.height / sh);
-    workCtx.drawImage(video, (work.width - sw * scale) / 2, (work.height - sh * scale) / 2, sw * scale, sh * scale);
+    letterbox = {
+      dx: (work.width - sw * scale) / 2,
+      dy: (work.height - sh * scale) / 2,
+      dw: sw * scale,
+      dh: sh * scale,
+      vw: work.width,
+      vh: work.height,
+    };
+    workCtx.drawImage(video, letterbox.dx, letterbox.dy, letterbox.dw, letterbox.dh);
     const image = workCtx.getImageData(0, 0, work.width, work.height);
     const grid = cellGrid(image);
     history.push(grid);
     if (history.length > 18) history.shift();
     const cand = scoreCells(history);
-    if (mode === "AUTO" && cand) {
-      aim.nx = aim.nx * 0.7 + cand.nx * 0.3;
-      aim.ny = aim.ny * 0.7 + cand.ny * 0.3;
+
+    if (mode === "AUTO") {
+      acquired = holdCandidate(acquired, cand, { holdAfterRx: heldAfterRx });
+      if (acquired) {
+        aim.nx = acquired.nx;
+        aim.ny = acquired.ny;
+      }
     }
+
     const spot = { x: aim.nx * work.width, y: aim.ny * work.height, w: 40, h: 40 };
     const value = sampleRegion(image, spot.x, spot.y, 40, 40);
     series.push(performance.now(), value);
     const st = recentStats(series);
-    const period = estimateClockMs(series.samples) || cfg.symbolMs;
-    const hit = correlateStart(series.samples, period, CLOCK_TRAIN);
+    const clock = recoverClockFromTrain(series.samples, lastClockMs || cfg.symbolMs);
     let bits = [];
     let decoded = { rejected: "no-clock" };
-    if (hit.score >= 0.28) {
-      bits = sliceFrom(series.samples, hit.t, period, 64);
+    if (clock.score >= CLOCK_SCORE_MIN) {
+      lastClockMs = clock.symbolMs;
+      bits = sliceFrom(series.samples, clock.t0, clock.symbolMs, 80);
       decoded = decodeBits(bits, cfg.stage);
-    } else {
-      bits = sliceFrom(series.samples, series.samples[0]?.t || 0, period, 32);
+      if (decoded.rejected == null) heldAfterRx = true;
     }
-    paintOverlay(spot, hit.score >= 0.28);
-    apply(decoded, bits, period, value, st.contrast, cand?.score || 0);
+    paintOverlay(spot, clock.score >= CLOCK_SCORE_MIN);
+    apply(decoded, bits, clock, value, st.contrast, cand?.score || acquired?.score || 0);
   }
   requestAnimationFrame(sampleFrame);
 }
 
 async function startCamera() {
   running = true;
+  acquired = null;
+  heldAfterRx = false;
+  lastClockMs = null;
   setMode("AUTO");
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: false,
@@ -217,16 +274,15 @@ async function startCamera() {
 }
 
 overlay.addEventListener("pointerdown", (ev) => {
-  const r = overlay.getBoundingClientRect();
-  aim = {
-    nx: Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width)),
-    ny: Math.min(1, Math.max(0, (ev.clientY - r.top) / r.height)),
-  };
+  aim = tapToAim(ev.clientX, ev.clientY);
+  acquired = { nx: aim.nx, ny: aim.ny, i: -1, score: 1 };
   setMode("LOCKED");
   log(`LOCKED ${(aim.nx * 100).toFixed(0)},${(aim.ny * 100).toFixed(0)}`);
 });
 
 unlockBtn.addEventListener("click", () => {
+  acquired = null;
+  heldAfterRx = false;
   setMode("AUTO");
   log("AUTO");
 });
@@ -241,6 +297,7 @@ document.getElementById("cam").addEventListener("click", () => {
 document.getElementById("clear").addEventListener("click", () => {
   series.samples.length = 0;
   lastPayload = null;
+  lastClockMs = null;
   logEl.textContent = "";
   recBody.textContent = "none yet";
   banner.hidden = true;
