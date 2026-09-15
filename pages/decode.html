@@ -10,7 +10,7 @@
 <body class="decode">
   <video id="stage" playsinline muted autoplay></video>
   <canvas id="overlay"></canvas>
-  <div id="loop-banner" hidden>PACKET OK</div>
+  <div id="loop-banner" hidden>RAW MATCH</div>
 
   <header class="hud">
     <p class="kicker">FIELD STATION <span id="station-label">----</span></p>
@@ -22,14 +22,14 @@
     <div class="meter">Signal<div class="bar"><i id="sig-bar"></i></div></div>
     <div class="meter">Contrast<div class="bar"><i id="con-bar"></i></div></div>
     <canvas id="wave" width="240" height="36"></canvas>
-    <div class="meter" id="sync-line">Candidate —</div>
-    <div class="meter" id="frame-line">Frame —</div>
-    <div class="meter" id="ecc-line">Vote —</div>
-    <div class="recovered" id="recovered">
-      <p class="kicker">COMMITTED PACKET</p>
+    <div class="meter" id="raw-line">RAW —</div>
+    <div class="meter" id="sync-line">Clock —</div>
+    <div class="meter" id="frame-line">Symbol —</div>
+    <div class="recovered">
+      <p class="kicker">SEEN</p>
       <pre id="rec-body">none yet</pre>
     </div>
-    <p class="status dim" id="diag">camera is the instrument</p>
+    <p class="status dim" id="diag">lock the bright disc</p>
     <div class="log" id="log"></div>
   </aside>
 
@@ -39,8 +39,8 @@
   </div>
 
   <footer class="hud">
-    <a href="tx.html?station=7F29&amp;sym=67">transmitter</a>
-    <span id="footer-note">commit = CRC ok + vote</span>
+    <a href="tx.html?station=7F29&amp;sym=67&amp;stage=1&amp;period=120">transmitter</a>
+    <span id="footer-note">RAW first</span>
   </footer>
 
   <script type="module" src="decoder.js"></script>

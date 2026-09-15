@@ -10,14 +10,15 @@
 <body class="tx">
   <div id="tx-led" aria-hidden="true"></div>
   <header class="tx-hud">
-    <p class="kicker">OPTICAL PACKET</p>
-    <p class="lede" id="tx-meta">station | seq | symbol | type</p>
+    <p class="kicker">STAGE 1 · STATION <span id="station-label">7F29</span></p>
+    <p class="lede" id="tx-meta">elapsed-time clock</p>
   </header>
-  <p id="tx-packet">7F29 | 0001 | 67 | 01</p>
-  <p id="tx-hint">Tap fullscreen. Phone camera on the disc. The disc is the packet.</p>
+  <p id="tx-packet">7F29  SYM 67</p>
+  <p id="tx-raw">TX 01100111</p>
+  <p id="tx-hint">Tap fullscreen. Point the phone at the disc. First proof is RAW bits.</p>
   <footer class="tx-hud">
     <span id="tx-frame">idle</span>
-    <a href="decode.html?station=7F29&amp;sym=67">decoder</a>
+    <a href="decode.html?station=7F29&amp;sym=67&amp;stage=1&amp;period=120">decoder</a>
   </footer>
   <script type="module" src="tx.js"></script>
 </body>

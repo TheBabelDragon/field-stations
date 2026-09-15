@@ -1,68 +1,41 @@
-import { encodePacket, TYPE, formatPacket } from "./optical/packet.js";
+import { encodeStage, byteBits } from "./optical/phy.js";
 import { parseBootstrap } from "./station/station-config.js";
 
 const cfg = parseBootstrap();
-const stationId = cfg.stationId;
-const payload = cfg.payload;
-const framesPerSymbol = cfg.frames;
-const repeats = Math.max(2, Number(new URLSearchParams(location.search).get("rep") || 3));
+const symbols = encodeStage(cfg.stage, {
+  stationId: cfg.stationId,
+  sequence: 1,
+  payload: cfg.payload,
+});
 
 document.getElementById("station-label").textContent = cfg.stationParam;
 
 const led = document.getElementById("tx-led");
 const meta = document.getElementById("tx-meta");
-const frameEl = document.getElementById("tx-frame");
 const pktEl = document.getElementById("tx-packet");
+const rawEl = document.getElementById("tx-raw");
+const frameEl = document.getElementById("tx-frame");
 
-function pack(seq) {
-  return encodePacket({
-    stationId,
-    sequence: seq,
-    type: TYPE.SYMBOL,
-    payload,
-  });
-}
-
-let seq = 1;
-let copies = 0;
-let symbols = pack(seq);
+const t0 = performance.now();
 let index = 0;
-let frameCount = 0;
 
-function renderLabel() {
-  const view = formatPacket({
-    stationId,
-    sequence: seq,
-    type: TYPE.SYMBOL,
-    typeName: "SYMBOL",
-    payload,
-  });
-  pktEl.textContent = `${view.st} | ${view.seq} | ${view.sym} | ${view.typ}`;
-  meta.textContent = `${framesPerSymbol} frames/bit · payload ${cfg.payloadHex} · ${repeats}x · tap fullscreen`;
-  frameEl.textContent = `copy ${copies + 1}/${repeats}  bit ${index + 1}/${symbols.length}`;
+meta.textContent = `stage ${cfg.stage} · ${cfg.symbolMs}ms/bit · elapsed clock · tap fullscreen`;
+pktEl.textContent = `${cfg.stationParam}  SYM ${cfg.payloadHex}`;
+rawEl.textContent = `TX ${byteBits(cfg.payload).join("")}  (${cfg.payloadHex})`;
+
+function apply(i) {
+  const bit = symbols[i];
+  led.classList.toggle("on", bit === 1);
+  frameEl.textContent = `bit ${i + 1}/${symbols.length} = ${bit}`;
 }
 
-function applyBit() {
-  led.classList.toggle("on", symbols[index] === 1);
-  renderLabel();
-}
+apply(0);
 
-applyBit();
-
-function tick() {
-  frameCount += 1;
-  if (frameCount % framesPerSymbol === 0) {
-    index += 1;
-    if (index >= symbols.length) {
-      copies += 1;
-      index = 0;
-      if (copies >= repeats) {
-        copies = 0;
-        seq = seq >= 255 ? 1 : seq + 1;
-        symbols = pack(seq);
-      }
-    }
-    applyBit();
+function tick(now) {
+  const i = Math.floor((now - t0) / cfg.symbolMs) % symbols.length;
+  if (i !== index) {
+    index = i;
+    apply(i);
   }
   requestAnimationFrame(tick);
 }
