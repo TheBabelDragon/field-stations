@@ -31,41 +31,44 @@ function valueAt(samples, t) {
   return a.value + (b.value - a.value) * u;
 }
 
-function template(pattern, symbolMs, dt) {
-  const nPer = Math.max(2, Math.round(symbolMs / dt));
-  const tmpl = [];
-  for (const bit of pattern) {
-    const v = bit ? 1 : -1;
-    for (let i = 0; i < nPer; i++) tmpl.push(v);
+function symbolMean(samples, t0, symbolMs, k) {
+  const a = t0 + k * symbolMs + symbolMs * 0.3;
+  const b = t0 + k * symbolMs + symbolMs * 0.7;
+  let sum = 0;
+  for (let i = 0; i < 4; i++) {
+    sum += valueAt(samples, a + (b - a) * ((i + 0.5) / 4));
   }
-  return { tmpl, nPer, width: tmpl.length * dt };
+  return sum / 4;
 }
 
-function scoreTemplate(samples, t0, tmpl, dt, mid, amp) {
-  let s = 0;
-  for (let j = 0; j < tmpl.length; j++) {
-    s += ((valueAt(samples, t0 + j * dt) - mid) / amp) * tmpl[j];
-  }
-  return s / tmpl.length;
-}
-
-export function correlatePattern(samples, symbolMs, pattern, dt = 16) {
-  if (!samples || samples.length < 8) return { score: -1, t: 0, width: 0, symbolMs };
+export function scorePattern(samples, t0, symbolMs, pattern) {
   const { mid, amp } = extrema(samples);
-  const { tmpl, width } = template(pattern, symbolMs, dt);
+  let s = 0;
+  for (let k = 0; k < pattern.length; k++) {
+    const v = (symbolMean(samples, t0, symbolMs, k) - mid) / amp;
+    s += v * (pattern[k] ? 1 : -1);
+  }
+  return s / pattern.length;
+}
+
+export function correlatePattern(samples, symbolMs, pattern, stepMs = null) {
+  if (!samples || samples.length < 8 || symbolMs <= 0) {
+    return { score: -1, t: 0, width: 0, symbolMs };
+  }
   const tFirst = samples[0].t;
   const tLast = samples[samples.length - 1].t;
-  if (tLast - tFirst < width) return { score: -1, t: tFirst, width, symbolMs };
+  const width = pattern.length * symbolMs;
+  if (tLast - tFirst < width * 0.8) return { score: -1, t: tFirst, width, symbolMs };
+  const step = stepMs || Math.max(8, Math.round(symbolMs / 8));
   let best = { score: -1, t: tFirst, width, symbolMs };
-  const step = Math.max(dt, Math.round(symbolMs / 6));
-  for (let t = tFirst; t + width <= tLast; t += step) {
-    const score = scoreTemplate(samples, t, tmpl, dt, mid, amp);
+  for (let t = tFirst; t + width * 0.5 <= tLast; t += step) {
+    const score = scorePattern(samples, t, symbolMs, pattern);
     if (score > best.score) best = { score, t, width, symbolMs };
   }
   const lo = Math.max(tFirst, best.t - symbolMs);
-  const hi = Math.min(tLast - width, best.t + symbolMs);
-  for (let t = lo; t <= hi; t += dt) {
-    const score = scoreTemplate(samples, t, tmpl, dt, mid, amp);
+  const hi = Math.min(tLast, best.t + symbolMs);
+  for (let t = lo; t <= hi; t += 4) {
+    const score = scorePattern(samples, t, symbolMs, pattern);
     if (score > best.score) best = { score, t, width, symbolMs };
   }
   return best;
@@ -123,14 +126,11 @@ export function recoverClockFromTrain(samples, hintMs = null) {
 }
 
 export function recoverSync(samples, clock) {
-  if (!clock || clock.score < 0) return { score: -1, t: 0 };
-  const searchFrom = clock.t0 + clock.width * 0.7;
-  const window = samples.filter((s) => s.t >= searchFrom - clock.symbolMs && s.t <= searchFrom + clock.symbolMs * (SYNC.length + 4));
-  if (window.length < 4) {
-    const hit = correlatePattern(samples, clock.symbolMs, SYNC);
-    return { score: hit.score, t: hit.t, width: hit.width };
-  }
-  const hit = correlatePattern(window.length ? window : samples, clock.symbolMs, SYNC);
+  if (!clock || clock.score < 0) return { score: -1, t: 0, width: 0 };
+  const tStart = clock.t0 + clock.symbolMs * (CLOCK_TRAIN.length - 1);
+  const tEnd = clock.t0 + clock.symbolMs * (CLOCK_TRAIN.length + SYNC.length + 2);
+  const window = samples.filter((s) => s.t >= tStart - clock.symbolMs && s.t <= tEnd);
+  const hit = correlatePattern(window.length ? window : samples, clock.symbolMs, SYNC, 4);
   return { score: hit.score, t: hit.t, width: hit.width };
 }
 
