@@ -1,4 +1,4 @@
-import { encodeDemoFrame, MESSAGE } from "./optical/frame.js";
+import { encodeLiteFrame } from "./optical/lite.js";
 import { parseBootstrap } from "./station/station-config.js";
 
 const cfg = parseBootstrap();
@@ -13,23 +13,14 @@ const frameEl = document.getElementById("tx-frame");
 const meta = document.getElementById("tx-meta");
 
 function pack(seq) {
-  const symbols = [
-    ...encodeDemoFrame({
-      stationId,
-      sequence: seq,
-      messageType: MESSAGE.STATION_HELLO,
-      payload: new TextEncoder().encode("HI"),
-    }),
-    ...Array(8).fill(0),
-  ];
-  return symbols;
+  return [...encodeLiteFrame({ stationId, sequence: seq }), ...Array(6).fill(0)];
 }
 
 let seq = 1;
 let symbols = pack(seq);
 let index = 0;
 let last = performance.now();
-meta.textContent = `demo PHY · ${symbolMs}ms · ${symbols.length} symbols/frame · hold phone still`;
+meta.textContent = `lite PHY · ${symbolMs}ms · ${symbols.length} symbols · tap for fullscreen`;
 
 function tick(now) {
   if (now - last >= symbolMs) {
@@ -37,12 +28,12 @@ function tick(now) {
     else last += symbolMs;
     const bit = symbols[index];
     led.classList.toggle("on", bit === 1);
-    document.body.classList.toggle("lit", bit === 1);
     bitEl.textContent = bit ? "1" : "0";
     frameEl.textContent = `HELLO #${seq}  ${index + 1}/${symbols.length}`;
     index += 1;
     if (index >= symbols.length) {
-      seq += 1;
+      seq = (seq + 1) & 0xff;
+      if (!seq) seq = 1;
       symbols = pack(seq);
       index = 0;
     }
@@ -50,6 +41,10 @@ function tick(now) {
   requestAnimationFrame(tick);
 }
 requestAnimationFrame(tick);
+
+document.body.addEventListener("click", () => {
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {});
+});
 
 if (navigator.wakeLock?.request) {
   const arm = () => navigator.wakeLock.request("screen").catch(() => {});
