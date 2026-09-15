@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/TheBabelDragon/field-stations/contracts/field-observation/schema.json",
+  "title": "StationFieldObservation",
+  "description": "field-stations v0.1 RFID / physical observation envelope. Admitted into field-os; not a FieldDelta.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract", "station_id", "sequence", "timestamp_ns", "tag_id", "provenance"],
+  "properties": {
+    "contract": { "type": "string", "const": "0.1" },
+    "station_id": { "type": "string", "minLength": 1 },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "timestamp_ns": { "type": "integer", "minimum": 0 },
+    "tag_id": { "type": "string", "minLength": 1 },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "rssi": { "type": "number" },
+    "field_epoch": { "type": "integer", "minimum": 0 },
+    "field_sequence": { "type": "integer", "minimum": 0 },
+    "message_type": { "type": "string" },
+    "state_hash": { "type": "string" },
+    "provenance": {
+      "type": "object",
+      "required": ["class", "source"],
+      "properties": {
+        "class": {
+          "type": "string",
+          "enum": ["physical", "derived", "synthetic", "remote", "replayed"]
+        },
+        "source": { "type": "string" },
+        "instrument": { "type": "string" },
+        "node_id": { "type": "string" }
+      }
+    }
+  }
+}

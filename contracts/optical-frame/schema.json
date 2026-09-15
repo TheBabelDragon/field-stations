@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/TheBabelDragon/field-stations/contracts/optical-frame/schema.json",
+  "title": "OpticalFrame",
+  "description": "Logical optical packet after Manchester decode and before / after ECC.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "station_id", "sequence", "message_type", "payload"],
+  "properties": {
+    "version": { "type": "integer", "minimum": 0, "maximum": 15 },
+    "station_id": { "type": "integer", "minimum": 0, "maximum": 65535 },
+    "sequence": { "type": "integer", "minimum": 0, "maximum": 65535 },
+    "message_type": { "type": "integer", "minimum": 0, "maximum": 255 },
+    "payload": { "type": "string", "description": "hex-encoded payload bytes" },
+    "crc16": { "type": "integer", "minimum": 0, "maximum": 65535 },
+    "recovered": { "type": "boolean" }
+  }
+}
