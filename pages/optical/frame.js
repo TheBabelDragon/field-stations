@@ -104,6 +104,16 @@ export function encodeFrame({ stationId, sequence, messageType, payload, version
   return [...LEAD_IN, ...PREAMBLE, ...manchesterEncode(bytesToBits(framed))];
 }
 
+/** Screen/camera demo PHY: same header+CRC, no ECC, no Manchester. Short enough to lock live. */
+export function encodeDemoFrame({ stationId, sequence, messageType, payload, version = PROTOCOL_VERSION }) {
+  const body = new Uint8Array(7 + payload.length);
+  body.set(packHeader(version, stationId, sequence, messageType, payload.length), 0);
+  body.set(payload, 7);
+  const crc = crc16Ccitt(body);
+  const crcBytes = Uint8Array.from([(crc >> 8) & 0xff, crc & 0xff]);
+  return [...LEAD_IN, ...PREAMBLE, ...bytesToBits(body), ...bytesToBits(crcBytes)];
+}
+
 export function findPreamble(symbols) {
   const n = PREAMBLE.length;
   for (let i = 0; i <= symbols.length - n; i++) {
@@ -127,25 +137,25 @@ function takeManchester(symbols, nBits) {
 
 export function decodeSymbols(symbols) {
   const start = findPreamble(symbols);
-  if (start < 0) return { frame: null, rejected: "sync-not-found", start: 0, end: 0 };
+  if (start < 0) return { frame: null, rejected: "sync-not-found", start: 0, end: 0, preamble: false };
   const body = symbols.slice(start + PREAMBLE.length);
   try {
     const lenBits = takeManchester(body, 8);
     const eccLen = bitsToBytes(lenBits)[0];
     const restBits = takeManchester(body.slice(16), 8 * eccLen);
     const ecc = bitsToBytes(restBits);
-    if (ecc.length !== eccLen) return { frame: null, rejected: "ecc-truncated", start, end: symbols.length };
+    if (ecc.length !== eccLen) return { frame: null, rejected: "ecc-truncated", start, end: symbols.length, preamble: true };
     const { bytes: protectedBytes, recovered } = eccDecode(ecc);
-    if (protectedBytes.length < 9) return { frame: null, rejected: "protected-short", start, end: symbols.length };
+    if (protectedBytes.length < 9) return { frame: null, rejected: "protected-short", start, end: symbols.length, preamble: true };
     const bodyBytes = protectedBytes.slice(0, -2);
     const crcBytes = protectedBytes.slice(-2);
     const expect = crc16Ccitt(bodyBytes);
     const got = (crcBytes[0] << 8) | crcBytes[1];
-    if (expect !== got) return { frame: null, rejected: "crc-mismatch", start, end: symbols.length };
+    if (expect !== got) return { frame: null, rejected: "crc-mismatch", start, end: symbols.length, preamble: true };
     const header = unpackHeader(bodyBytes);
     const payload = bodyBytes.slice(7, 7 + header.length);
     if (payload.length !== header.length) {
-      return { frame: null, rejected: "payload-truncated", start, end: symbols.length };
+      return { frame: null, rejected: "payload-truncated", start, end: symbols.length, preamble: true };
     }
     return {
       frame: {
@@ -155,12 +165,60 @@ export function decodeSymbols(symbols) {
         messageType: header.messageType,
         payload,
         recovered,
+        phy: "v0",
       },
       rejected: null,
       start,
       end: start + PREAMBLE.length + 16 + eccLen * 16,
+      preamble: true,
     };
   } catch (err) {
-    return { frame: null, rejected: String(err.message || err), start, end: symbols.length };
+    return { frame: null, rejected: String(err.message || err), start, end: symbols.length, preamble: true };
+  }
+}
+
+export function decodeDemoSymbols(symbols) {
+  const start = findPreamble(symbols);
+  if (start < 0) return { frame: null, rejected: "sync-not-found", start: 0, end: 0, preamble: false };
+  const bits = symbols.slice(start + PREAMBLE.length);
+  if (bits.length < 56 + 16) {
+    return { frame: null, rejected: "frame-short", start, end: symbols.length, preamble: true };
+  }
+  try {
+    const header = unpackHeader(bitsToBytes(bits.slice(0, 56)));
+    const need = 56 + header.length * 8 + 16;
+    if (bits.length < need) {
+      return { frame: null, rejected: "frame-short", start, end: symbols.length, preamble: true };
+    }
+    const payloadBits = bits.slice(56, 56 + header.length * 8);
+    const crcBits = bits.slice(56 + header.length * 8, need);
+    if (payloadBits.length % 8 || crcBits.length !== 16) {
+      return { frame: null, rejected: "bit-length", start, end: symbols.length, preamble: true };
+    }
+    const payload = bitsToBytes(payloadBits);
+    const crcBytes = bitsToBytes(crcBits);
+    const body = new Uint8Array(7 + payload.length);
+    body.set(packHeader(header.version, header.stationId, header.sequence, header.messageType, header.length), 0);
+    body.set(payload, 7);
+    const expect = crc16Ccitt(body);
+    const got = (crcBytes[0] << 8) | crcBytes[1];
+    if (expect !== got) return { frame: null, rejected: "crc-mismatch", start, end: start + PREAMBLE.length + need, preamble: true };
+    return {
+      frame: {
+        version: header.version,
+        stationId: header.stationId,
+        sequence: header.sequence,
+        messageType: header.messageType,
+        payload,
+        recovered: false,
+        phy: "demo",
+      },
+      rejected: null,
+      start,
+      end: start + PREAMBLE.length + need,
+      preamble: true,
+    };
+  } catch (err) {
+    return { frame: null, rejected: String(err.message || err), start, end: symbols.length, preamble: true };
   }
 }
