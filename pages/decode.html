@@ -8,9 +8,10 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body class="decode">
-  <video id="stage" playsinline muted></video>
+  <video id="stage" playsinline muted autoplay></video>
   <canvas id="overlay"></canvas>
   <div id="virtual-led" aria-hidden="true"></div>
+  <div id="loop-banner" hidden>LOOP CLOSED</div>
 
   <header class="hud">
     <p class="kicker">FIELD STATION <span id="station-label">----</span></p>
@@ -20,22 +21,24 @@
   <aside class="hud">
     <h2 id="listen-state">SEARCHING FOR LED</h2>
     <div class="meter">Signal<div class="bar"><i id="sig-bar"></i></div></div>
+    <div class="meter">Contrast<div class="bar"><i id="con-bar"></i></div></div>
+    <canvas id="wave" width="240" height="36"></canvas>
     <div class="meter" id="sync-line">Sync —</div>
     <div class="meter" id="frame-line">Frame —</div>
     <div class="meter" id="ecc-line">ECC —</div>
-    <p class="status dim" id="diag">waiting</p>
+    <p class="status dim" id="diag">tap CAMERA, then tap the glowing disc</p>
     <div class="log" id="log"></div>
   </aside>
 
   <div class="hud-bar">
     <button type="button" id="cam" class="primary">CAMERA</button>
-    <button type="button" id="virt">VIRTUAL LED</button>
+    <button type="button" id="virt">SELF TEST</button>
     <button type="button" id="clear">CLEAR</button>
   </div>
 
   <footer class="hud">
-    <a href="index.html">bootstrap</a>
-    <span id="footer-note">camera stays on device</span>
+    <a href="tx.html">open transmitter</a>
+    <span id="footer-note">tap the LED in the viewfinder</span>
   </footer>
 
   <script type="module" src="decoder.js"></script>

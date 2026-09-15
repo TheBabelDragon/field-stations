@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#000" />
+  <title>FIELD STATION transmitter</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="tx">
+  <div id="tx-led" aria-hidden="true"></div>
+  <header class="tx-hud">
+    <p class="kicker">TRANSMIT · STATION <span id="station-label">7F29</span></p>
+    <p class="lede" id="tx-meta">demo PHY · 150ms</p>
+  </header>
+  <p id="tx-bit">0</p>
+  <p id="tx-hint">Point the phone camera at this disc. Dim the room. Fill the phone reticle with the disc.</p>
+  <footer class="tx-hud">
+    <span id="tx-frame">idle</span>
+    <a href="decode.html">decoder</a>
+  </footer>
+  <script type="module" src="tx.js"></script>
+</body>
+</html>
