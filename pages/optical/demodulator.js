@@ -1,4 +1,6 @@
-/** Brightness timeline -> OOK symbols. Logical symbols stay separate from PHY. */
+/** Brightness timeline -> symbols. Camera-native correlator first, hard slice second. */
+
+import { PREAMBLE, decodeDemoSymbols, decodeSymbols } from "./frame.js";
 
 export function waveformToSymbols(samples, samplesPerSymbol, threshold = null) {
   if (samplesPerSymbol < 1) throw new Error("samples-per-symbol");
@@ -21,11 +23,11 @@ export function waveformToSymbols(samples, samplesPerSymbol, threshold = null) {
   return symbols;
 }
 
-export function decodeWaveform(samples, samplesPerSymbol, decodeSymbols, threshold = null) {
+export function decodeWaveform(samples, samplesPerSymbol, decodeSymbolsFn, threshold = null) {
   let last = { frame: null, rejected: "sync-not-found" };
   for (let phase = 0; phase < samplesPerSymbol; phase++) {
     const sliced = waveformToSymbols(samples.slice(phase), samplesPerSymbol, threshold);
-    const result = decodeSymbols(sliced);
+    const result = decodeSymbolsFn(sliced);
     if (result.frame) return result;
     last = result;
   }
@@ -50,54 +52,129 @@ export function recentStats(series, windowMs = 2500) {
     n++;
   }
   if (!n) return { min: 0, max: 0, mean: 0, variance: 0, contrast: 0 };
-  const mean = sum / n;
-  return { min, max, mean, variance: 0, contrast: max - min };
+  return { min, max, mean: sum / n, variance: 0, contrast: max - min };
 }
 
-export function timedToSymbols(samples, t0, symbolMs, threshold) {
-  if (!samples.length) return [];
-  const t1 = samples[samples.length - 1].t;
-  const symbols = [];
-  let last = samples[0].value;
+export function resample(series, dt = 20) {
+  const s = series.samples;
+  if (s.length < 2) return [];
+  const out = [];
   let i = 0;
-  for (let t = t0; t + symbolMs * 0.55 <= t1; t += symbolMs) {
-    const end = t + symbolMs;
+  for (let t = s[0].t; t <= s[s.length - 1].t; t += dt) {
+    while (i + 1 < s.length && s[i + 1].t < t) i++;
+    const a = s[i];
+    const b = s[Math.min(i + 1, s.length - 1)];
+    const span = Math.max(1, b.t - a.t);
+    const u = Math.min(1, Math.max(0, (t - a.t) / span));
+    out.push({ t, v: a.value + (b.value - a.value) * u });
+  }
+  return out;
+}
+
+export function normalizeLocal(grid, win = 48) {
+  return grid.map((p, idx) => {
+    let min = 1;
+    let max = 0;
+    const a = Math.max(0, idx - win);
+    const b = Math.min(grid.length, idx + win);
+    for (let j = a; j < b; j++) {
+      if (grid[j].v < min) min = grid[j].v;
+      if (grid[j].v > max) max = grid[j].v;
+    }
+    const mid = (min + max) / 2;
+    const amp = Math.max(0.05, (max - min) / 2);
+    return { t: p.t, v: (p.v - mid) / amp };
+  });
+}
+
+export function correlatePattern(norm, symbolMs, pattern, dt) {
+  const tmpl = [];
+  const nPer = Math.max(2, Math.round(symbolMs / dt));
+  for (const bit of pattern) {
+    const val = bit ? 1 : -1;
+    for (let i = 0; i < nPer; i++) tmpl.push(val);
+  }
+  let best = { score: -1, t: 0, index: -1, width: tmpl.length * dt };
+  if (norm.length < tmpl.length) return best;
+  for (let i = 0; i <= norm.length - tmpl.length; i++) {
+    let s = 0;
+    for (let j = 0; j < tmpl.length; j++) s += norm[i + j].v * tmpl[j];
+    const score = s / tmpl.length;
+    if (score > best.score) best = { score, t: norm[i].t, index: i, width: tmpl.length * dt };
+  }
+  return best;
+}
+
+export function sliceBitsFrom(norm, t0, symbolMs, nBits) {
+  const bits = [];
+  for (let k = 0; k < nBits; k++) {
+    const start = t0 + k * symbolMs;
+    const end = start + symbolMs;
     let sum = 0;
     let n = 0;
-    while (i < samples.length && samples[i].t < t) i++;
-    let j = i;
-    while (j < samples.length && samples[j].t < end) {
-      sum += samples[j].value;
-      n++;
-      j++;
+    for (const p of norm) {
+      if (p.t >= start && p.t < end) {
+        sum += p.v;
+        n++;
+      }
     }
-    if (n) {
-      last = sum / n;
-    }
-    symbols.push(last >= threshold ? 1 : 0);
+    bits.push(n && sum / n >= 0 ? 1 : 0);
   }
-  return symbols;
+  return bits;
 }
 
-export function decodeTimed(series, symbolMs, decodeFns) {
-  const decoders = Array.isArray(decodeFns) ? decodeFns : [decodeFns];
+export function decodeFromSeries(series, symbolMs) {
   const st = recentStats(series);
-  if (st.contrast < 0.06) {
-    return { frame: null, rejected: "sync-not-found", contrast: st.contrast, stats: st };
+  const base = {
+    frame: null,
+    rejected: "sync-not-found",
+    preamble: false,
+    score: 0,
+    contrast: st.contrast,
+    stats: st,
+    bitsHave: 0,
+    bitsNeed: 88,
+  };
+  if (series.samples.length < 8) return base;
+  const dt = 20;
+  const grid = resample(series, dt);
+  if (grid.length < 16) return base;
+  const norm = normalizeLocal(grid);
+  const hit = correlatePattern(norm, symbolMs, PREAMBLE, dt);
+  base.score = hit.score;
+  if (hit.score < 0.32 || hit.index < 0) return base;
+
+  const bodyStart = hit.t + hit.width;
+  const availableMs = series.samples[series.samples.length - 1].t - bodyStart;
+  const bitsHave = Math.max(0, Math.floor(availableMs / symbolMs));
+  const bits = sliceBitsFrom(norm, bodyStart, symbolMs, Math.max(bitsHave, 0));
+  const symbols = [...PREAMBLE, ...bits];
+  const demo = decodeDemoSymbols(symbols);
+  if (demo.frame) {
+    demo.score = hit.score;
+    demo.contrast = st.contrast;
+    demo.stats = st;
+    demo.bitsHave = bits.length;
+    demo.bitsNeed = 88;
+    demo.preamble = true;
+    return demo;
   }
-  const threshold = (st.min + st.max) / 2;
-  let last = { frame: null, rejected: "sync-not-found", contrast: st.contrast, stats: st };
-  const offsets = [0, 0.15, 0.3, 0.45, 0.6, 0.75, 0.9].map((f) => symbolMs * f);
-  const tStart = series.samples[0].t;
-  for (const off of offsets) {
-    const symbols = timedToSymbols(series.samples, tStart + off, symbolMs, threshold);
-    for (const decode of decoders) {
-      const result = decode(symbols);
-      result.contrast = st.contrast;
-      result.stats = st;
-      if (result.frame) return result;
-      if (result.rejected !== "sync-not-found") last = result;
-    }
+  const full = decodeSymbols(symbols);
+  if (full.frame) {
+    full.score = hit.score;
+    full.contrast = st.contrast;
+    full.stats = st;
+    full.bitsHave = bits.length;
+    full.bitsNeed = 200;
+    full.preamble = true;
+    return full;
   }
-  return last;
+  const rejected = demo.rejected && demo.rejected !== "sync-not-found" ? demo.rejected : full.rejected;
+  return {
+    ...base,
+    rejected: rejected === "frame-short" ? "frame-short" : (rejected || "frame-short"),
+    preamble: true,
+    bitsHave: bits.length,
+    score: hit.score,
+  };
 }
