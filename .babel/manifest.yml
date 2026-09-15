@@ -1,0 +1,40 @@
+babel: "0.1"
+identity:
+  name: field-stations
+  owner: TheBabelDragon
+  repo: TheBabelDragon/field-stations
+  url: https://github.com/TheBabelDragon/field-stations
+  kind: physical-terminal
+  version: "0.1.0"
+purpose: >
+  Physical Field OS terminal: RFID as input, a single LED as a coherent
+  optical transmitter, Field OS as the event/state layer. Canonsphere
+  remains a downstream witness.
+status: experimental
+entrypoints:
+  - kind: cli
+    command: python3 -m simulator.virtual_station
+    output: json
+  - kind: cli
+    command: python3 -m host.station_tools
+    output: json
+  - kind: module
+    path: optical/protocol.py
+runtime:
+  language: python
+  requires:
+    - python>=3.10
+inputs:
+  - name: StationFieldObservation
+    schema: contracts/field-observation/schema.json
+outputs:
+  - name: OpticalFrame
+    schema: contracts/optical-frame/schema.json
+  - name: FieldTick-hash
+capabilities:
+  - encode-optical-frame
+  - decode-optical-frame
+  - virtual-station-loop
+operations:
+  safe: [encode-optical-frame, decode-optical-frame, virtual-station-loop]
+  mutation: []

@@ -1,0 +1,25 @@
+capabilities:
+  - name: encode-optical-frame
+    description: Pack a StationFieldObservation into Manchester OOK symbols.
+    inputs: [StationFieldObservation]
+    outputs: [OpticalFrame, symbols]
+    operation: encode
+    side_effects: []
+    safe: true
+    entry: python3 -m host.station_tools encode
+  - name: decode-optical-frame
+    description: Recover an OpticalFrame from a symbol stream or camera waveform.
+    inputs: [symbols]
+    outputs: [OpticalFrame]
+    operation: decode
+    side_effects: []
+    safe: true
+    entry: python3 -m host.station_tools decode
+  - name: virtual-station-loop
+    description: RFID observation through LED and camera simulator; compare state hashes.
+    inputs: [tag_id]
+    outputs: [tx_hash, rx_hash]
+    operation: replay
+    side_effects: []
+    safe: true
+    entry: python3 -m simulator.virtual_station

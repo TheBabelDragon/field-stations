@@ -1,0 +1,13 @@
+relations:
+  - kind: admits-into
+    target: TheBabelDragon/field-os
+    object: FieldObservation
+  - kind: witnessed-by
+    target: TheBabelDragon/canonsphere
+    object: FieldTick
+  - kind: optical-kin
+    target: TheBabelDragon/field-os
+    object: bylight
+  - kind: body
+    target: TheBabelDragon/optical-body-s3
+    note: measurement body; this repo is the broadcast terminal
