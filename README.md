@@ -10,13 +10,26 @@ Canonsphere is an optional witness / replay client.
 
 ## Target
 
-Live site — the `pages/` folder is the Pages root. Do not add `/pages/` to the URL.
-
 - site: [thebabeldragon.github.io/field-stations](https://thebabeldragon.github.io/field-stations/)
-- decoder: [decode.html?station=7F29](https://thebabeldragon.github.io/field-stations/decode.html?station=7F29&v=1&sym=80)
-- virtual LED: [decode.html?demo=1](https://thebabeldragon.github.io/field-stations/decode.html?station=7F29&v=1&sym=80&demo=1)
+- transmitter: [tx.html?station=7F29&sym=150](https://thebabeldragon.github.io/field-stations/tx.html?station=7F29&v=1&sym=150&phy=demo)
+- decoder: [decode.html?station=7F29&sym=150](https://thebabeldragon.github.io/field-stations/decode.html?station=7F29&v=1&sym=150)
+- self test: [decode.html?demo=1](https://thebabeldragon.github.io/field-stations/decode.html?station=7F29&v=1&sym=150&demo=1)
 
-Print the decoder URL as an ordinary QR. Put the LED inside or next to the code.
+## Live loop (computer + phone)
+
+VIRTUAL LED on the decoder page is a same-tab self test. It does not go through the camera.
+
+For a real demonstration:
+
+1. Computer: open the [transmitter](https://thebabeldragon.github.io/field-stations/tx.html?station=7F29&v=1&sym=150&phy=demo). Fullscreen. Bright disc on black.
+2. Phone: open the [decoder](https://thebabeldragon.github.io/field-stations/decode.html?station=7F29&v=1&sym=150).
+3. Tap **CAMERA**. Allow the camera. Point at the disc.
+4. Tap the disc in the viewfinder so the reticle sits on it.
+5. Contrast bar should move. Then `SYNC ✓`. Then a green **LOOP CLOSED** banner and a beep.
+
+Same `station` and same `sym` on both sides. Dim the room. Fill the phone reticle with the disc, not the chrome.
+
+Print the decoder URL as an ordinary QR. Put a hardware LED inside or next to the code later.
 
 This is not an RFID reader with a status light.
 It is a physical Field OS terminal with a bidirectional sensing/broadcast boundary.
@@ -25,9 +38,6 @@ It is a physical Field OS terminal with a bidirectional sensing/broadcast bounda
 QR  = bootstrap ("start here")
 LED = live optical data channel
 ```
-
-A phone scans an ordinary QR, lands on Pages, then listens to one LED.
-The hardware stays dumb. The decoder lives in the browser.
 
 ```
 PHYSICAL OBJECT -> RFID -> FIELD STATION -> SINGLE LED
@@ -91,14 +101,10 @@ Not Morse. A framed physical-layer packet.
 SYNC | VERSION | STATION_ID | SEQUENCE | TYPE | LEN | PAYLOAD | CRC16 | ECC
 ```
 
+Screen-to-phone demos use a short `demo` PHY (same header + CRC, no ECC / Manchester) so a packet finishes in seconds. Hardware later uses v0.
+
 The station repeats the frame so a moving phone can lock mid-stream.
 A damaged frame becomes a rejected observation, never a different message.
-
-Logical symbols are separate from physical modulation.
-v0 modulation is binary OOK. Later: intensity, color, QR geometry.
-
-During transmission the protocol owns the LED pin.
-Idle states (IDLE / DISCOVERING / OBSERVING / ERROR) are distinct from the waveform.
 
 ## Closed physical loop
 
