@@ -1,30 +1,47 @@
 # QR bootstrap + GitHub Pages decoder
 
 The printed QR is discovery.
-The LED is the live optical channel.
+The LED / display disc is the live optical channel.
+An ordinary phone camera reconstructs the bits.
 
 ## Target
 
 GitHub Actions publishes the `pages/` folder as the site root.
-There is no extra `/pages/` in the public URL.
 
 - site: https://thebabeldragon.github.io/field-stations/
-- decoder: https://thebabeldragon.github.io/field-stations/decode.html?station=7F29&v=1&sym=80
-- virtual LED: https://thebabeldragon.github.io/field-stations/decode.html?station=7F29&v=1&sym=80&demo=1
+- transmitter: https://thebabeldragon.github.io/field-stations/tx.html?station=7F29&sym=67&stage=1&period=120
+- decoder: https://thebabeldragon.github.io/field-stations/decode.html?station=7F29&stage=1&period=120
 
-Print the decode URL as an ordinary QR. Put the LED inside or immediately next to the code.
-The URL stays still while station state changes.
+`sym` is the payload byte the transmitter will emit.
+`period` is optional TX bit time. Reception recovers timing from CLOCK_TRAIN.
+The decoder does not treat `sym` as the answer.
 
-Query fields:
+## Physical loop
 
-| key | meaning |
-| --- | --- |
-| `station` | 16-bit station id, hex |
-| `v` | protocol version |
-| `sym` | symbol period in milliseconds |
-| `led` | `center` or `bright` |
-| `demo=1` | virtual LED, no camera |
+```
+CAMERA
+  ↓
+temporal candidate acquisition
+  ↓
+persistent ROI  (AUTO hold / LOCKED tap)
+  ↓
+CLOCK_TRAIN  10101010 10101010
+  ↓
+recovered symbol clock
+  ↓
+SYNC  11001100
+  ↓
+payload / frame
+  ↓
+CRC validation (stage 3+)
+  ↓
+recovered FieldObservation
+```
 
-## Hardware stays dumb
+Tap locks the ROI until UNLOCK. AUTO hunts a blinking disc, then holds it.
 
-ESP32: read RFID, encode frame, blink one LED, repeat the frame.
+## Stages
+
+1. CLOCK + SYNC + PAYLOAD
+2. CLOCK + SYNC + STATION + PAYLOAD
+3. CLOCK + SYNC + STATION + SEQ + PAYLOAD + CRC8
