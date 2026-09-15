@@ -8,6 +8,22 @@ Field OS is the event/state layer.
 GitHub Pages is the optical receiver.
 Canonsphere is an optional witness / replay client.
 
+## Target
+
+```
+https://thebabeldragon.github.io/field-stations/pages/
+https://thebabeldragon.github.io/field-stations/pages/decode.html?station=7F29&v=1&sym=80
+```
+
+Print the decode URL as an ordinary QR. Put the LED inside or next to the code.
+`/` redirects into `/pages/` because Pages is publishing the repo root.
+
+Phase 1, no hardware:
+
+```
+https://thebabeldragon.github.io/field-stations/pages/decode.html?station=7F29&v=1&sym=80&demo=1
+```
+
 This is not an RFID reader with a status light.
 It is a physical Field OS terminal with a bidirectional sensing/broadcast boundary.
 
@@ -54,17 +70,6 @@ and [`canonsphere`](https://github.com/TheBabelDragon/canonsphere).
 ## Decoder
 
 Client-side only. Camera frames never leave the phone.
-
-```
-https://thebabeldragon.github.io/field-stations/
-https://thebabeldragon.github.io/field-stations/decode.html?station=7F29&v=1&sym=80
-```
-
-Print that URL as a normal QR. Put the LED inside or next to the code.
-The URL stays still while station state moves.
-
-Phase 1 works with no hardware: open the decoder and tap VIRTUAL LED.
-
 Details: [docs/DECODER.md](docs/DECODER.md).
 
 ## First milestone
