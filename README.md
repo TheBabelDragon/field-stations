@@ -10,19 +10,13 @@ Canonsphere is an optional witness / replay client.
 
 ## Target
 
-```
-https://thebabeldragon.github.io/field-stations/pages/
-https://thebabeldragon.github.io/field-stations/pages/decode.html?station=7F29&v=1&sym=80
-```
+Live site — the `pages/` folder is the Pages root. Do not add `/pages/` to the URL.
 
-Print the decode URL as an ordinary QR. Put the LED inside or next to the code.
-`/` redirects into `/pages/` because Pages is publishing the repo root.
+- site: [thebabeldragon.github.io/field-stations](https://thebabeldragon.github.io/field-stations/)
+- decoder: [decode.html?station=7F29](https://thebabeldragon.github.io/field-stations/decode.html?station=7F29&v=1&sym=80)
+- virtual LED: [decode.html?demo=1](https://thebabeldragon.github.io/field-stations/decode.html?station=7F29&v=1&sym=80&demo=1)
 
-Phase 1, no hardware:
-
-```
-https://thebabeldragon.github.io/field-stations/pages/decode.html?station=7F29&v=1&sym=80&demo=1
-```
+Print the decoder URL as an ordinary QR. Put the LED inside or next to the code.
 
 This is not an RFID reader with a status light.
 It is a physical Field OS terminal with a bidirectional sensing/broadcast boundary.
