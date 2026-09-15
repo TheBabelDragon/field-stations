@@ -11,46 +11,27 @@
   <div class="wrap">
     <p class="kicker">TheBabelDragon · field-stations</p>
     <h1>QR bootstrap.<br />LED is live data.</h1>
-    <p class="lede">
-      Computer is the transmitter. Phone is the decoder.
-      Same station id. Same symbol period.
-    </p>
+    <p class="lede">Computer transmits. Phone decodes. Same station. Same symbol period.</p>
 
     <div class="card">
       <h2>LIVE LOOP</h2>
-      <p class="lede">1. On the computer, open the transmitter and leave it fullscreen.</p>
-      <p class="lede">2. On the phone, open the decoder, tap CAMERA, then tap the glowing disc.</p>
-      <p class="lede">3. Fill the reticle with the disc. Watch contrast, then SYNC, then LOOP CLOSED.</p>
+      <p class="lede">Hard-refresh both pages first. Then:</p>
+      <p class="lede">1. Computer: transmitter, fullscreen, brightness up.</p>
+      <p class="lede">2. Phone: decoder → CAMERA → tap the white disc → hold still.</p>
+      <p class="lede">Waveform must bounce. Contrast &gt; 10%. corr climbs. SYNC ✓. Then LOOP CLOSED (~15s).</p>
       <div class="row">
-        <a href="tx.html?station=7F29&amp;v=1&amp;sym=150&amp;phy=demo"><button class="primary">TRANSMITTER</button></a>
-        <a href="decode.html?station=7F29&amp;v=1&amp;sym=150"><button class="primary">DECODER</button></a>
-        <a href="decode.html?station=7F29&amp;v=1&amp;sym=150&amp;demo=1"><button>SELF TEST</button></a>
+        <a href="tx.html?station=7F29&amp;v=1&amp;sym=200&amp;phy=demo"><button class="primary">TRANSMITTER</button></a>
+        <a href="decode.html?station=7F29&amp;v=1&amp;sym=200"><button class="primary">DECODER</button></a>
+        <a href="decode.html?station=7F29&amp;v=1&amp;sym=200&amp;demo=1"><button>SELF TEST</button></a>
       </div>
     </div>
 
     <div class="card">
       <h2>TARGET</h2>
       <p class="lede"><a href="https://thebabeldragon.github.io/field-stations/">https://thebabeldragon.github.io/field-stations/</a></p>
-      <p class="lede"><a href="https://thebabeldragon.github.io/field-stations/tx.html?station=7F29&amp;v=1&amp;sym=150&amp;phy=demo">tx.html?station=7F29&amp;sym=150</a></p>
-      <p class="lede"><a href="https://thebabeldragon.github.io/field-stations/decode.html?station=7F29&amp;v=1&amp;sym=150">decode.html?station=7F29&amp;sym=150</a></p>
+      <p class="lede"><a href="https://thebabeldragon.github.io/field-stations/tx.html?station=7F29&amp;v=1&amp;sym=200&amp;phy=demo">tx.html?station=7F29&amp;sym=200</a></p>
+      <p class="lede"><a href="https://thebabeldragon.github.io/field-stations/decode.html?station=7F29&amp;v=1&amp;sym=200">decode.html?station=7F29&amp;sym=200</a></p>
     </div>
-
-    <div class="card">
-      <h2>PHASES</h2>
-      <pre>1  fake station — known HELLO packets
-2  RFID observation as live payload
-3  Field OS admission
-4  QR geometry as spatial frame
-5  Canonsphere witness</pre>
-    </div>
-
-    <p class="lede" style="margin-top:28px">
-      <a href="https://github.com/TheBabelDragon/field-stations">source</a>
-      ·
-      <a href="https://github.com/TheBabelDragon/field-os">field-os</a>
-      ·
-      <a href="https://github.com/TheBabelDragon/canonsphere">canonsphere</a>
-    </p>
   </div>
 </body>
 </html>

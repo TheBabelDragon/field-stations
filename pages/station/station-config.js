@@ -3,7 +3,7 @@
 export function parseBootstrap(search = window.location.search) {
   const q = new URLSearchParams(search);
   const stationRaw = (q.get("station") || "").replace(/^#/, "");
-  const symbolMs = Math.max(40, Number(q.get("sym") || 150));
+  const symbolMs = Math.max(80, Number(q.get("sym") || 200));
   let stationId = null;
   if (/^[0-9a-fA-F]+$/.test(stationRaw) && stationRaw.length <= 4) {
     stationId = parseInt(stationRaw, 16);
@@ -29,7 +29,7 @@ export function parseBootstrap(search = window.location.search) {
   };
 }
 
-export function bootstrapUrl({ origin, station = "7F29", version = 1, symbolMs = 150 }) {
+export function bootstrapUrl({ origin, station = "7F29", version = 1, symbolMs = 200 }) {
   const base = origin.replace(/\/$/, "");
   return `${base}/decode.html?station=${String(station).toUpperCase()}&v=${version}&sym=${symbolMs}`;
 }
