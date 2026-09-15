@@ -1,0 +1,157 @@
+:root {
+  --bg: #080812;
+  --panel: rgba(12, 12, 28, 0.82);
+  --line: #2a2a4a;
+  --text: #ececf6;
+  --dim: #8b8ba8;
+  --accent: #c9b8ff;
+  --cyan: #7ee7ff;
+  --ok: #7dffb2;
+  --bad: #ff5d6c;
+  --warn: #ffd37e;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+}
+body.decode { overflow: hidden; height: 100%; }
+.kicker {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--accent);
+}
+h1 { margin: 8px 0 0; letter-spacing: 0.08em; font-size: clamp(26px, 6vw, 44px); }
+.lede { margin: 8px 0 0; color: var(--dim); font-family: var(--mono); font-size: 12px; line-height: 1.5; }
+a { color: var(--accent); text-decoration: none; }
+.wrap { max-width: 720px; margin: 0 auto; padding: 28px 20px 64px; }
+.card {
+  margin-top: 22px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+.card h2 {
+  margin: 0 0 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  color: var(--accent);
+}
+pre, code { font-family: var(--mono); font-size: 12px; }
+pre { white-space: pre-wrap; color: var(--cyan); }
+.row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+button {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--text);
+  background: #1a1a32;
+  border: 1px solid var(--line);
+  padding: 11px 13px;
+  cursor: pointer;
+}
+button.primary { background: var(--accent); color: #080812; border-color: var(--accent); }
+button:hover { border-color: var(--accent); }
+#stage {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #000;
+}
+#overlay {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+header.hud, aside.hud, footer.hud, .hud-bar {
+  position: fixed;
+  z-index: 4;
+  pointer-events: none;
+}
+header.hud {
+  top: max(14px, env(safe-area-inset-top));
+  left: max(16px, env(safe-area-inset-left));
+}
+aside.hud {
+  top: max(14px, env(safe-area-inset-top));
+  right: max(14px, env(safe-area-inset-right));
+  width: min(280px, calc(100vw - 28px));
+  background: var(--panel);
+  border: 1px solid var(--line);
+  padding: 12px 14px;
+  pointer-events: auto;
+  backdrop-filter: blur(12px);
+}
+aside.hud h2 {
+  margin: 0 0 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--accent);
+}
+.meter { margin: 8px 0; font-family: var(--mono); font-size: 11px; color: var(--dim); }
+.bar { height: 7px; background: #1a1a32; margin-top: 4px; }
+.bar i { display: block; height: 100%; width: 0; background: var(--cyan); }
+.status { font-family: var(--mono); font-size: 12px; letter-spacing: 0.12em; margin: 10px 0 0; }
+.status.search { color: var(--warn); }
+.status.ok { color: var(--ok); }
+.status.bad { color: var(--bad); }
+.status.dim { color: var(--dim); }
+.log {
+  margin: 10px 0 0;
+  max-height: 28vh;
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--dim);
+}
+.hud-bar {
+  left: 50%;
+  bottom: max(56px, calc(env(safe-area-inset-bottom) + 40px));
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  pointer-events: auto;
+}
+footer.hud {
+  left: max(16px, env(safe-area-inset-left));
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(10px, env(safe-area-inset-bottom));
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+}
+#virtual-led {
+  position: fixed;
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -50%);
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: #110;
+  box-shadow: 0 0 0 1px #333;
+  z-index: 2;
+  display: none;
+}
+#virtual-led.on {
+  background: #fff6d5;
+  box-shadow: 0 0 28px 10px rgba(255, 230, 140, 0.85);
+}
+body.virtual #virtual-led { display: block; }
+body.virtual #stage { background: #101018; }
