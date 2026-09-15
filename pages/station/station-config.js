@@ -1,40 +1,22 @@
-/** Bootstrap QR -> decoder context. The QR does not carry live payload. */
+/** Bootstrap QR -> decoder context. Station id comes from the QR, not the LED. */
 
 export function parseBootstrap(search = window.location.search) {
   const q = new URLSearchParams(search);
-  const stationRaw = (q.get("station") || "").replace(/^#/, "");
-  const symbolMs = Math.max(16, Number(q.get("sym") || 50));
-  let stationId = null;
+  const stationRaw = (q.get("station") || "7F29").replace(/^#/, "");
+  const frames = Math.max(3, Number(q.get("frames") || 4));
+  const symbolMs = Number(q.get("sym") || Math.round(frames * (1000 / 60)));
+  let stationId = 0x7f29;
   if (/^[0-9a-fA-F]+$/.test(stationRaw) && stationRaw.length <= 4) {
     stationId = parseInt(stationRaw, 16);
-  } else if (stationRaw) {
-    return {
-      stationParam: stationRaw,
-      stationId: null,
-      version: Number(q.get("v") || 1),
-      symbolMs,
-      channel: q.get("channel") || "single-led",
-      expectedLocation: q.get("led") || "center",
-      url: typeof window !== "undefined" ? window.location.href : "",
-    };
   }
   return {
-    stationParam: stationRaw || "0000",
-    stationId: stationId == null ? 0 : stationId,
+    stationParam: stationRaw.toUpperCase(),
+    stationId,
     version: Number(q.get("v") || 1),
     symbolMs,
-    channel: q.get("channel") || "single-led",
-    expectedLocation: q.get("led") || "center",
+    frames,
+    channel: "single-led",
+    expectedLocation: "center",
     url: typeof window !== "undefined" ? window.location.href : "",
   };
 }
-
-export function bootstrapUrl({ origin, station = "7F29", version = 1, symbolMs = 50 }) {
-  const base = origin.replace(/\/$/, "");
-  return `${base}/decode.html?station=${String(station).toUpperCase()}&v=${version}&sym=${symbolMs}`;
-}
-
-export const DEFAULT_OPTICAL = {
-  channel: "single-led",
-  expected_location: "center",
-};

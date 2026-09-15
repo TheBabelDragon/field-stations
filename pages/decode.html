@@ -10,39 +10,37 @@
 <body class="decode">
   <video id="stage" playsinline muted autoplay></video>
   <canvas id="overlay"></canvas>
-  <div id="virtual-led" aria-hidden="true"></div>
   <div id="loop-banner" hidden>RECOVERED</div>
 
   <header class="hud">
     <p class="kicker">FIELD STATION <span id="station-label">----</span></p>
-    <p class="lede" id="mode-label">QR bootstrap · single-LED channel</p>
+    <p class="lede" id="mode-label">camera decoder</p>
   </header>
 
   <aside class="hud">
-    <h2 id="listen-state">SEARCHING FOR LED</h2>
+    <h2 id="listen-state">TAP CAMERA</h2>
     <div class="meter">Signal<div class="bar"><i id="sig-bar"></i></div></div>
     <div class="meter">Contrast<div class="bar"><i id="con-bar"></i></div></div>
     <canvas id="wave" width="240" height="36"></canvas>
     <div class="meter" id="sync-line">Candidate —</div>
     <div class="meter" id="frame-line">Frame —</div>
-    <div class="meter" id="ecc-line">CRC —</div>
+    <div class="meter" id="ecc-line">Vote —</div>
     <div class="recovered" id="recovered">
       <p class="kicker">LAST RECOVERED</p>
-      <pre id="rec-body">none yet — candidate is not a message</pre>
+      <pre id="rec-body">none — point at the computer disc</pre>
     </div>
-    <p class="status dim" id="diag">tap CAMERA</p>
+    <p class="status dim" id="diag">the test is the camera</p>
     <div class="log" id="log"></div>
   </aside>
 
   <div class="hud-bar">
     <button type="button" id="cam" class="primary">CAMERA</button>
-    <button type="button" id="virt">SELF TEST</button>
     <button type="button" id="clear">CLEAR</button>
   </div>
 
   <footer class="hud">
-    <a href="tx.html?station=7F29&amp;v=1&amp;sym=50">transmitter</a>
-    <span id="footer-note">recovered = CRC ok</span>
+    <a href="tx.html?station=7F29&amp;frames=4">transmitter</a>
+    <span id="footer-note">recovered seq must match the screen</span>
   </footer>
 
   <script type="module" src="decoder.js"></script>
