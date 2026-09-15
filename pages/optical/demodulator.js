@@ -1,7 +1,7 @@
-/** Camera brightness -> lite3 symbols. Candidate preamble is not a recovered message. */
+/** Camera brightness -> optical packet. CRC is authentication. Votes commit. */
 
 import { PREAMBLE } from "./frame.js";
-import { decodeLiteSymbols, LITE_BODY_BITS } from "./lite.js";
+import { decodePacketSymbols, BODY_BITS } from "./packet.js";
 
 export function recentStats(series, windowMs = 1800) {
   const all = series.samples;
@@ -26,7 +26,7 @@ export function resample(series, dt = 16) {
   const s = series.samples;
   if (s.length < 2) return [];
   const t1 = s[s.length - 1].t;
-  const t0 = Math.max(s[0].t, t1 - 3500);
+  const t0 = Math.max(s[0].t, t1 - 5000);
   const out = [];
   let i = 0;
   while (i + 1 < s.length && s[i + 1].t < t0) i++;
@@ -107,15 +107,14 @@ export function sliceBitsFrom(norm, t0, symbolMs, nBits) {
 export function decodeFromSeries(series, symbolMs) {
   const st = recentStats(series);
   const base = {
-    frame: null,
+    packet: null,
     rejected: "sync-not-found",
     preamble: false,
-    recovered: false,
     score: 0,
     contrast: st.contrast,
     stats: st,
     bitsHave: 0,
-    bitsNeed: LITE_BODY_BITS,
+    bitsNeed: BODY_BITS,
     symbolMs,
   };
   if (series.samples.length < 8) return base;
@@ -123,7 +122,7 @@ export function decodeFromSeries(series, symbolMs) {
   const grid = resample(series, dt);
   if (grid.length < 16) return base;
   const norm = normalizeLocal(grid);
-  const rates = [0.92, 1, 1.08].map((f) => symbolMs * f);
+  const rates = [0.94, 1, 1.06].map((f) => symbolMs * f);
   let hit = { score: -1, t: 0, index: -1, width: 0, symbolMs };
   for (const rate of rates) {
     const cand = correlatePattern(norm, rate, PREAMBLE, dt);
@@ -135,29 +134,28 @@ export function decodeFromSeries(series, symbolMs) {
 
   const rate = hit.symbolMs || symbolMs;
   let best = { ...base, preamble: true, score: hit.score, rejected: "frame-short" };
-  for (const phase of [-0.25, -0.12, 0, 0.12, 0.25].map((f) => rate * f)) {
+  for (const phase of [-0.2, -0.1, 0, 0.1, 0.2].map((f) => rate * f)) {
     const bodyStart = hit.t + hit.width + phase;
     const availableMs = series.samples[series.samples.length - 1].t - bodyStart;
     const bitsHave = Math.max(0, Math.floor(availableMs / rate));
     if (bitsHave > best.bitsHave) best.bitsHave = bitsHave;
-    if (bitsHave < LITE_BODY_BITS) continue;
-    const bits = sliceBitsFrom(norm, bodyStart, rate, LITE_BODY_BITS);
-    const lite = decodeLiteSymbols([...PREAMBLE, ...bits]);
-    if (lite.frame) {
+    if (bitsHave < BODY_BITS) continue;
+    const bits = sliceBitsFrom(norm, bodyStart, rate, BODY_BITS);
+    const decoded = decodePacketSymbols([...PREAMBLE, ...bits]);
+    if (decoded.packet) {
       return {
-        ...lite,
+        ...decoded,
         score: hit.score,
         contrast: st.contrast,
         stats: st,
         bitsHave: bits.length,
-        bitsNeed: LITE_BODY_BITS,
-        recovered: true,
+        bitsNeed: BODY_BITS,
         symbolMs: rate,
       };
     }
     best = {
       ...best,
-      rejected: lite.rejected || "vote-fail",
+      rejected: decoded.rejected || "crc-mismatch",
       bitsHave,
       preamble: true,
     };
