@@ -65,7 +65,7 @@ button:hover { border-color: var(--accent); }
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   background: #000;
 }
 #overlay {
@@ -75,10 +75,7 @@ button:hover { border-color: var(--accent); }
   height: 100%;
   pointer-events: auto;
 }
-header.hud, aside.hud, footer.hud, .hud-bar {
-  position: fixed;
-  z-index: 4;
-}
+header.hud, aside.hud, footer.hud, .hud-bar { position: fixed; z-index: 4; }
 header.hud {
   top: max(14px, env(safe-area-inset-top));
   left: max(16px, env(safe-area-inset-left));
@@ -141,26 +138,25 @@ footer.hud {
 #virtual-led {
   position: fixed;
   left: 50%;
-  top: 46%;
+  top: 50%;
   transform: translate(-50%, -50%);
-  width: min(42vmin, 220px);
-  height: min(42vmin, 220px);
+  width: min(48vmin, 260px);
+  height: min(48vmin, 260px);
   border-radius: 50%;
   background: #110;
-  box-shadow: 0 0 0 1px #333;
   z-index: 2;
   display: none;
 }
 #virtual-led.on {
-  background: #fff6d5;
-  box-shadow: 0 0 48px 18px rgba(255, 230, 140, 0.9);
+  background: #fff;
+  box-shadow: 0 0 60px 20px rgba(255, 255, 220, 0.95);
 }
 body.virtual #virtual-led { display: block; }
-body.virtual #stage { background: #050508; }
+body.virtual #stage { background: #000; }
 #loop-banner {
   position: fixed;
   left: 50%;
-  top: 18%;
+  top: 16%;
   transform: translateX(-50%);
   z-index: 8;
   padding: 14px 22px;
@@ -171,30 +167,28 @@ body.virtual #stage { background: #050508; }
   font-size: 16px;
 }
 body.tx { background: #000; }
+body.tx.lit { background: #000; }
 #tx-led {
   position: fixed;
   left: 50%;
-  top: 48%;
+  top: 50%;
   transform: translate(-50%, -50%);
-  width: min(62vmin, 420px);
-  height: min(62vmin, 420px);
+  width: min(70vmin, 480px);
+  height: min(70vmin, 480px);
   border-radius: 50%;
-  background: #070704;
+  background: #000;
 }
 #tx-led.on {
-  background: #fffbe6;
-  box-shadow: 0 0 120px 40px rgba(255, 244, 180, 0.95);
+  background: #fff;
+  box-shadow: 0 0 160px 50px #fff;
 }
 .tx-hud {
   position: fixed;
   z-index: 3;
   font-family: var(--mono);
-  color: #5a5a68;
+  color: #4a4a58;
 }
-header.tx-hud {
-  top: 16px;
-  left: 16px;
-}
+header.tx-hud { top: 16px; left: 16px; }
 footer.tx-hud {
   bottom: 16px;
   left: 16px;
@@ -209,7 +203,7 @@ footer.tx-hud {
   margin: 0;
   font-family: var(--mono);
   font-size: 28px;
-  color: #333;
+  color: #2a2a32;
 }
 #tx-hint {
   position: fixed;

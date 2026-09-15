@@ -1,65 +1,49 @@
-import { encodeDemoFrame, encodeFrame, MESSAGE } from "./optical/frame.js";
-import { packObservation } from "./protocol/field-packet.js";
+import { encodeDemoFrame, MESSAGE } from "./optical/frame.js";
 import { parseBootstrap } from "./station/station-config.js";
 
 const cfg = parseBootstrap();
 const stationId = cfg.stationId || 0x7f29;
-const symbolMs = Math.max(80, cfg.symbolMs || 150);
-const phy = new URLSearchParams(location.search).get("phy") || "demo";
+const symbolMs = Math.max(120, cfg.symbolMs || 200);
 
 document.getElementById("station-label").textContent = stationId.toString(16).toUpperCase().padStart(4, "0");
-document.getElementById("tx-meta").textContent = `${phy} PHY · ${symbolMs}ms · point phone here`;
 
 const led = document.getElementById("tx-led");
 const bitEl = document.getElementById("tx-bit");
 const frameEl = document.getElementById("tx-frame");
+const meta = document.getElementById("tx-meta");
 
-function encodeSeq(seq) {
-  const helloPay = new TextEncoder().encode("HI");
-  const hello = {
-    stationId,
-    sequence: seq,
-    messageType: MESSAGE.STATION_HELLO,
-    payload: helloPay,
-  };
-  const obs = {
-    stationId,
-    sequence: seq + 100,
-    messageType: MESSAGE.FIELD_OBSERVATION,
-    payload: packObservation({
-      tagId: "deadbeefcafe0001",
-      stationId: "field-station-0",
-      confidence: 0.91,
-      rssi: 42,
-      fieldEpoch: 1,
-      timestampNs: 1_000_000_000 + seq,
+function pack(seq) {
+  const symbols = [
+    ...encodeDemoFrame({
+      stationId,
+      sequence: seq,
+      messageType: MESSAGE.STATION_HELLO,
+      payload: new TextEncoder().encode("HI"),
     }),
-  };
-  const enc = phy === "v0" ? encodeFrame : encodeDemoFrame;
-  return {
-    symbols: [...enc(hello), ...Array(10).fill(0), ...enc(obs), ...Array(14).fill(0)],
-    label: `HELLO #${seq} + OBS #${seq + 100}`,
-  };
+    ...Array(8).fill(0),
+  ];
+  return symbols;
 }
 
-let pack = encodeSeq(1);
 let seq = 1;
+let symbols = pack(seq);
 let index = 0;
 let last = performance.now();
+meta.textContent = `demo PHY · ${symbolMs}ms · ${symbols.length} symbols/frame · hold phone still`;
 
 function tick(now) {
-  const lag = now - last;
-  if (lag >= symbolMs) {
-    if (lag > symbolMs * 3) last = now;
+  if (now - last >= symbolMs) {
+    if (now - last > symbolMs * 4) last = now;
     else last += symbolMs;
-    const bit = pack.symbols[index];
+    const bit = symbols[index];
     led.classList.toggle("on", bit === 1);
+    document.body.classList.toggle("lit", bit === 1);
     bitEl.textContent = bit ? "1" : "0";
-    frameEl.textContent = `${pack.label}  ·  ${index + 1}/${pack.symbols.length}`;
+    frameEl.textContent = `HELLO #${seq}  ${index + 1}/${symbols.length}`;
     index += 1;
-    if (index >= pack.symbols.length) {
+    if (index >= symbols.length) {
       seq += 1;
-      pack = encodeSeq(seq);
+      symbols = pack(seq);
       index = 0;
     }
   }
@@ -68,10 +52,9 @@ function tick(now) {
 requestAnimationFrame(tick);
 
 if (navigator.wakeLock?.request) {
-  navigator.wakeLock.request("screen").catch(() => {});
+  const arm = () => navigator.wakeLock.request("screen").catch(() => {});
+  arm();
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") {
-      navigator.wakeLock.request("screen").catch(() => {});
-    }
+    if (document.visibilityState === "visible") arm();
   });
 }

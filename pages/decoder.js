@@ -1,8 +1,8 @@
-import { decodeDemoSymbols, decodeSymbols, encodeDemoFrame, encodeFrame, MESSAGE } from "./optical/frame.js";
-import { STATE, nextState } from "./optical/sync.js";
-import { TimeSeries, findBrightestCell, sampleRegion } from "./optical/sampler.js";
-import { decodeTimed, recentStats } from "./optical/demodulator.js";
-import { describeFrame, packObservation } from "./protocol/field-packet.js";
+import { encodeDemoFrame, MESSAGE } from "./optical/frame.js";
+import { STATE } from "./optical/sync.js";
+import { TimeSeries, sampleRegion } from "./optical/sampler.js";
+import { decodeFromSeries, recentStats } from "./optical/demodulator.js";
+import { describeFrame } from "./protocol/field-packet.js";
 import { parseBootstrap } from "./station/station-config.js";
 
 const cfg = parseBootstrap();
@@ -27,7 +27,7 @@ stationLabel.textContent = cfg.stationParam && cfg.stationParam !== "0000"
   ? cfg.stationParam.toUpperCase()
   : "----";
 
-const series = new TimeSeries(8000);
+const series = new TimeSeries(12000);
 const work = document.createElement("canvas");
 const workCtx = work.getContext("2d", { willReadFrequently: true });
 const overCtx = overlay.getContext("2d");
@@ -39,7 +39,7 @@ let lastSeq = -1;
 let virtSymbols = [];
 let virtIndex = 0;
 let virtLast = 0;
-let aim = { nx: 0.5, ny: 0.42 };
+let aim = { nx: 0.5, ny: 0.5 };
 let audioCtx = null;
 
 function log(line) {
@@ -60,9 +60,9 @@ function beep(freq = 880) {
     o.frequency.value = freq;
     o.connect(g);
     g.connect(audioCtx.destination);
-    g.gain.value = 0.05;
+    g.gain.value = 0.06;
     o.start();
-    o.stop(audioCtx.currentTime + 0.12);
+    o.stop(audioCtx.currentTime + 0.14);
   } catch {
     /* ignore */
   }
@@ -75,27 +75,27 @@ function celebrate(desc) {
   clearTimeout(celebrate._t);
   celebrate._t = setTimeout(() => {
     banner.hidden = true;
-  }, 2400);
+  }, 2800);
 }
 
-function paintWave() {
+function paintWave(score) {
   const w = wave.width;
   const h = wave.height;
   waveCtx.fillStyle = "#10101c";
   waveCtx.fillRect(0, 0, w, h);
-  const samples = series.samples;
-  if (samples.length < 2) return;
-  const slice = samples.slice(-Math.min(samples.length, 180));
-  waveCtx.beginPath();
-  waveCtx.strokeStyle = "#7ee7ff";
-  waveCtx.lineWidth = 1.5;
-  slice.forEach((s, i) => {
-    const x = (i / (slice.length - 1)) * w;
-    const y = h - 2 - s.value * (h - 4);
-    if (i === 0) waveCtx.moveTo(x, y);
-    else waveCtx.lineTo(x, y);
-  });
-  waveCtx.stroke();
+  const slice = series.samples.slice(-180);
+  if (slice.length > 1) {
+    waveCtx.beginPath();
+    waveCtx.strokeStyle = score >= 0.32 ? "#7dffb2" : "#7ee7ff";
+    waveCtx.lineWidth = 1.5;
+    slice.forEach((s, i) => {
+      const x = (i / (slice.length - 1)) * w;
+      const y = h - 2 - s.value * (h - 4);
+      if (i === 0) waveCtx.moveTo(x, y);
+      else waveCtx.lineTo(x, y);
+    });
+    waveCtx.stroke();
+  }
 }
 
 function paintOverlay(spot) {
@@ -109,102 +109,93 @@ function paintOverlay(spot) {
   const y = spot.y * sy;
   overCtx.strokeStyle = "rgba(126,231,255,0.95)";
   overCtx.lineWidth = 2;
-  overCtx.strokeRect(x - 22, y - 22, 44, 44);
+  overCtx.strokeRect(x - 26, y - 26, 52, 52);
   overCtx.beginPath();
-  overCtx.arc(x, y, 5, 0, Math.PI * 2);
+  overCtx.arc(x, y, 6, 0, Math.PI * 2);
   overCtx.fillStyle = "#fff6d5";
   overCtx.fill();
 }
 
 function applyDecode(decoded, brightness, st) {
-  const state = nextState({ brightness, variance: st.contrast || st.variance || 0, decoded });
   const contrast = st.contrast ?? 0;
+  const score = decoded.score || 0;
   sigBar.style.width = `${Math.round(Math.max(0, Math.min(1, brightness)) * 100)}%`;
-  conBar.style.width = `${Math.round(Math.max(0, Math.min(1, contrast / 0.6)) * 100)}%`;
-  paintWave();
-  diag.textContent = `${(brightness * 100).toFixed(0)}% luma · contrast ${(contrast * 100).toFixed(0)}% · ${cfg.symbolMs}ms`;
+  conBar.style.width = `${Math.round(Math.max(0, Math.min(1, contrast / 0.45)) * 100)}%`;
+  paintWave(score);
+  diag.textContent = `${(brightness * 100).toFixed(0)}% luma  contrast ${(contrast * 100).toFixed(0)}%  corr ${score.toFixed(2)}  ${cfg.symbolMs}ms`;
 
-  if (contrast < 0.08 && mode === "camera") {
+  if (mode === "camera" && contrast < 0.1) {
     setState("NO CONTRAST", "bad");
-    syncLine.textContent = "Sync — fill reticle with the disc";
+    syncLine.textContent = "Sync — tap the disc, fill the box";
     return;
   }
-  if (state === STATE.NO_SIGNAL) {
-    setState(state, "dim");
-    syncLine.textContent = "Sync —";
+  if (decoded.frame) {
+    const frame = decoded.frame;
+    const desc = describeFrame(frame);
+    setState("LOOP CLOSED", "ok");
+    syncLine.textContent = `Sync ✓ corr ${score.toFixed(2)}`;
+    frameLine.textContent = `Frame ${desc.type} #${frame.sequence}`;
+    eccLine.textContent = frame.phy === "demo" ? "demo CRC ok" : "v0 ok";
+    if (frame.sequence !== lastSeq) {
+      lastSeq = frame.sequence;
+      celebrate(desc);
+      log(`LOOP ${desc.station} ${desc.type} #${frame.sequence} ${desc.hello || ""}`);
+    }
     return;
   }
-  if (decoded?.preamble && decoded.rejected) {
-    setState("SYNC FOUND", "search");
-    syncLine.textContent = "Sync ✓ preamble";
-    frameLine.textContent = `Frame ${decoded.rejected}`;
-    eccLine.textContent = "waiting for full packet";
+  if (decoded.preamble || score >= 0.32) {
+    setState("SYNC FOUND", "ok");
+    syncLine.textContent = `Sync ✓ corr ${score.toFixed(2)}`;
+    frameLine.textContent = `Frame ${decoded.bitsHave || 0}/${decoded.bitsNeed || 88} ${decoded.rejected || "collecting"}`;
+    eccLine.textContent = "hold still";
     return;
   }
-  if (!decoded || decoded.rejected === "sync-not-found") {
+  if (contrast >= 0.1) {
     setState(STATE.SEARCHING, "search");
-    syncLine.textContent = "Sync searching";
+    syncLine.textContent = `Sync searching  corr ${score.toFixed(2)}`;
     frameLine.textContent = "Frame --";
     eccLine.textContent = "ECC --";
     return;
   }
-  if (decoded.rejected) {
-    setState(decoded.rejected === "crc-mismatch" ? STATE.FRAME_CORRUPT : STATE.FRAME_LOST, "bad");
-    syncLine.textContent = "Sync ✓";
-    frameLine.textContent = `Frame ${decoded.rejected}`;
-    eccLine.textContent = "ECC --";
-    return;
-  }
-  const frame = decoded.frame;
-  const desc = describeFrame(frame);
-  syncLine.textContent = `Sync ✓ ${frame.phy || "v0"}`;
-  frameLine.textContent = `Frame ${desc.type} #${frame.sequence}`;
-  eccLine.textContent = frame.recovered ? "ECC recovered" : frame.phy === "demo" ? "demo PHY CRC" : "ECC clean";
-  setState(frame.phy === "demo" ? "LOOP CLOSED" : (frame.recovered ? STATE.FRAME_RECOVERED : STATE.FRAME_VALID), "ok");
-  if (frame.sequence !== lastSeq) {
-    lastSeq = frame.sequence;
-    celebrate(desc);
-    if (desc.observation) {
-      log(`LOOP ${desc.station} tag ${desc.observation.tag_id} conf=${desc.observation.confidence.toFixed(2)}`);
-    } else {
-      log(`LOOP ${desc.station} ${desc.type} #${frame.sequence} ${desc.hello || desc.payload_hex.slice(0, 24)}`);
-    }
-  }
+  setState(STATE.NO_SIGNAL, "dim");
+  syncLine.textContent = "Sync —";
 }
 
 function sampleCanvasSource(source, sw, sh) {
+  const ow = overlay.clientWidth || 320;
+  const oh = overlay.clientHeight || 180;
   work.width = 320;
-  work.height = Math.max(180, Math.round(320 * (sh / sw)));
-  workCtx.drawImage(source, 0, 0, work.width, work.height);
+  work.height = Math.max(160, Math.round(320 * (oh / ow)));
+  workCtx.fillStyle = "#000";
+  workCtx.fillRect(0, 0, work.width, work.height);
+  const scale = Math.min(work.width / sw, work.height / sh);
+  const dw = sw * scale;
+  const dh = sh * scale;
+  const dx = (work.width - dw) / 2;
+  const dy = (work.height - dh) / 2;
+  workCtx.drawImage(source, dx, dy, dw, dh);
   const image = workCtx.getImageData(0, 0, work.width, work.height);
-  let spot;
-  if (aim) {
-    spot = {
-      x: aim.nx * work.width,
-      y: aim.ny * work.height,
-      w: 36,
-      h: 36,
-      value: 0,
-    };
-  } else if (cfg.expectedLocation === "bright") {
-    spot = findBrightestCell(image);
-    spot.w = 28;
-    spot.h = 28;
-  } else {
-    spot = { x: work.width / 2, y: work.height / 2, w: 36, h: 36, value: 0 };
-  }
-  const value = sampleRegion(image, spot.x, spot.y, spot.w || 36, spot.h || 36);
+  const spot = {
+    x: aim.nx * work.width,
+    y: aim.ny * work.height,
+    w: 44,
+    h: 44,
+    value: 0,
+  };
+  const value = sampleRegion(image, spot.x, spot.y, spot.w, spot.h);
   spot.value = value;
   series.push(performance.now(), value);
   paintOverlay(spot);
   const st = recentStats(series);
-  const decoded = decodeTimed(series, cfg.symbolMs, [decodeDemoSymbols, decodeSymbols]);
+  const decoded = decodeFromSeries(series, cfg.symbolMs);
   applyDecode(decoded, value, st);
 }
 
 function cameraLoop() {
   if (mode !== "camera") return;
-  if (video.readyState >= 2) sampleCanvasSource(video, video.videoWidth || 640, video.videoHeight || 360);
+  if (video.readyState >= 2) {
+    sampleCanvasSource(video, video.videoWidth || 640, video.videoHeight || 360);
+  }
   raf = requestAnimationFrame(cameraLoop);
 }
 
@@ -212,7 +203,7 @@ async function startCamera() {
   stopVirtual();
   mode = "camera";
   document.body.classList.remove("virtual");
-  modeLabel.textContent = "camera · aim at the transmitter disc";
+  modeLabel.textContent = `camera · ${cfg.symbolMs}ms · tap the disc`;
   stream = await navigator.mediaDevices.getUserMedia({
     audio: false,
     video: {
@@ -223,8 +214,9 @@ async function startCamera() {
     },
   });
   video.srcObject = stream;
+  video.setAttribute("playsinline", "true");
   await video.play();
-  log("camera open — tap the glowing disc");
+  log("camera open — tap the glowing disc and hold still ~15s");
   cameraLoop();
 }
 
@@ -240,54 +232,42 @@ function stopCamera() {
 
 function buildVirtualSymbols() {
   const stationId = cfg.stationId || 0x7f29;
-  const frames = [];
-  for (let seq = 1; seq <= 4; seq++) {
-    const hello = encodeDemoFrame({
-      stationId,
-      sequence: seq,
-      messageType: MESSAGE.STATION_HELLO,
-      payload: new TextEncoder().encode("HI"),
-    });
-    const obs = encodeDemoFrame({
-      stationId,
-      sequence: seq + 100,
-      messageType: MESSAGE.FIELD_OBSERVATION,
-      payload: packObservation({
-        tagId: "deadbeefcafe0001",
-        stationId: "field-station-0",
-        confidence: 0.91,
-        rssi: 42,
-        fieldEpoch: 1,
-        timestampNs: 1000000000 + seq,
+  const out = [];
+  for (let seq = 1; seq <= 6; seq++) {
+    out.push(
+      ...encodeDemoFrame({
+        stationId,
+        sequence: seq,
+        messageType: MESSAGE.STATION_HELLO,
+        payload: new TextEncoder().encode("HI"),
       }),
-    });
-    frames.push(...hello, ...Array(10).fill(0), ...obs, ...Array(14).fill(0));
+      ...Array(8).fill(0),
+    );
   }
-  return frames;
+  return out;
 }
 
 function startVirtual() {
   stopCamera();
   mode = "virtual";
   document.body.classList.add("virtual");
-  modeLabel.textContent = "self test · same-tab loop (not the phone camera)";
+  modeLabel.textContent = "self test · not the phone camera";
   virtSymbols = buildVirtualSymbols();
   virtIndex = 0;
   virtLast = performance.now();
   series.samples.length = 0;
-  log("self test: decoder reads its own LED. Use tx.html + CAMERA for the real loop.");
+  log("self test reads its own disc. Real loop = tx.html + CAMERA.");
   const step = (now) => {
     if (mode !== "virtual") return;
     if (now - virtLast >= cfg.symbolMs) {
-      if (now - virtLast > cfg.symbolMs * 3) virtLast = now;
+      if (now - virtLast > cfg.symbolMs * 4) virtLast = now;
       else virtLast += cfg.symbolMs;
       const bit = virtSymbols[virtIndex % virtSymbols.length];
       virtIndex += 1;
       virtLed.classList.toggle("on", bit === 1);
-      series.push(now, bit ? 0.92 : 0.06);
+      series.push(now, bit ? 0.95 : 0.04);
       const st = recentStats(series);
-      const decoded = decodeTimed(series, cfg.symbolMs, [decodeDemoSymbols, decodeSymbols]);
-      applyDecode(decoded, bit ? 0.92 : 0.06, st);
+      applyDecode(decodeFromSeries(series, cfg.symbolMs), bit ? 0.95 : 0.04, st);
     }
     raf = requestAnimationFrame(step);
   };
@@ -310,7 +290,6 @@ function setAimFromEvent(ev) {
   log(`aim ${(aim.nx * 100).toFixed(0)},${(aim.ny * 100).toFixed(0)}`);
 }
 
-overlay.style.pointerEvents = "auto";
 overlay.addEventListener("pointerdown", setAimFromEvent);
 
 document.getElementById("cam").addEventListener("click", () => {
