@@ -10,7 +10,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
       - name: unit tests
         run: python3 -m unittest discover -s tests -v
       - name: virtual station loop
         run: python3 -m simulator.virtual_station
+      - name: js codec
+        run: node tests/test_js_codec.mjs
