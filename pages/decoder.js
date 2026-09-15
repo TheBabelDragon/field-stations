@@ -1,7 +1,7 @@
 import { TimeSeries, sampleRegion } from "./optical/sampler.js";
 import { recentStats } from "./optical/demodulator.js";
 import { cellGrid, scoreCells, holdCandidate, sliceFrom } from "./optical/detect.js";
-import { recoverClockFromTrain, recoverSync, CLOCK_SCORE_MIN } from "./optical/timing.js";
+import { recoverClockFromTrain, CLOCK_SCORE_MIN } from "./optical/timing.js";
 import { decodeBits } from "./optical/phy.js";
 import { parseBootstrap } from "./station/station-config.js";
 
@@ -40,7 +40,6 @@ let heldAfterRx = false;
 let lastPayload = null;
 let lastClockMs = null;
 let audioCtx = null;
-let letterbox = { dx: 0, dy: 0, dw: 320, dh: 180, vw: 320, vh: 180 };
 
 function log(line) {
   logEl.textContent = `[${new Date().toISOString().slice(11, 23)}] ${line}\n` + logEl.textContent;
@@ -114,18 +113,18 @@ function paintOverlay(spot, ok) {
 
 function tapToAim(clientX, clientY) {
   const r = overlay.getBoundingClientRect();
-  const nx = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
-  const ny = Math.min(1, Math.max(0, (clientY - r.top) / r.height));
-  return { nx, ny };
+  return {
+    nx: Math.min(1, Math.max(0, (clientX - r.left) / r.width)),
+    ny: Math.min(1, Math.max(0, (clientY - r.top) / r.height)),
+  };
 }
 
 function apply(decoded, bits, clock, brightness, contrast, signal) {
   const period = clock?.symbolMs;
   rawLine.textContent = `RAW ${(bits.join("") || "—").slice(-32)}`;
-  const clockTxt = clock && clock.score >= CLOCK_SCORE_MIN
+  syncLine.textContent = clock && clock.score >= CLOCK_SCORE_MIN
     ? `CLOCK ${Math.round(period)}ms  ${(clock.confidence * 100).toFixed(0)}%`
     : "CLOCK —";
-  syncLine.textContent = clockTxt;
   sigBar.style.width = `${Math.round(Math.max(0, Math.min(1, brightness)) * 100)}%`;
   conBar.style.width = `${Math.round(Math.max(0, Math.min(1, contrast / 0.45)) * 100)}%`;
   diag.textContent = `${mode}  con ${(contrast * 100).toFixed(0)}%  sig ${(signal * 100).toFixed(0)}%`;
@@ -149,7 +148,6 @@ function apply(decoded, bits, clock, brightness, contrast, signal) {
     const st = decoded.stationId != null
       ? decoded.stationId.toString(16).toUpperCase().padStart(4, "0")
       : "----";
-    const crc = decoded.sequence != null ? "CRC OK" : (cfg.stage >= 3 ? "CRC OK" : "—");
     setState(mode === "LOCKED" ? "LOCKED · RECEIVED" : "ACQUIRED · RECEIVED", "ok");
     frameLine.textContent = `RECEIVED ${hex}`;
     recBody.textContent = [
@@ -158,7 +156,7 @@ function apply(decoded, bits, clock, brightness, contrast, signal) {
       `PAYLOAD  ${hex}`,
       `CLOCK    ${Math.round(period)}ms`,
       decoded.sync ? "SYNC     OK" : null,
-      cfg.stage >= 3 ? `CRC      ${crc}` : null,
+      cfg.stage >= 3 ? "CRC      OK" : null,
       `MODE     ${mode}`,
     ].filter(Boolean).join("\n");
     if (hex !== lastPayload) {
@@ -209,15 +207,13 @@ function sampleFrame() {
     workCtx.fillStyle = "#000";
     workCtx.fillRect(0, 0, work.width, work.height);
     const scale = Math.min(work.width / sw, work.height / sh);
-    letterbox = {
-      dx: (work.width - sw * scale) / 2,
-      dy: (work.height - sh * scale) / 2,
-      dw: sw * scale,
-      dh: sh * scale,
-      vw: work.width,
-      vh: work.height,
-    };
-    workCtx.drawImage(video, letterbox.dx, letterbox.dy, letterbox.dw, letterbox.dh);
+    workCtx.drawImage(
+      video,
+      (work.width - sw * scale) / 2,
+      (work.height - sh * scale) / 2,
+      sw * scale,
+      sh * scale,
+    );
     const image = workCtx.getImageData(0, 0, work.width, work.height);
     const grid = cellGrid(image);
     history.push(grid);
