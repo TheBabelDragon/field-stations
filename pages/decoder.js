@@ -1,12 +1,10 @@
-import { STATE } from "./optical/sync.js";
 import { TimeSeries, sampleRegion } from "./optical/sampler.js";
 import { decodeFromSeries, recentStats } from "./optical/demodulator.js";
+import { formatPacket, asObservation } from "./optical/packet.js";
 import { parseBootstrap } from "./station/station-config.js";
 
 const cfg = parseBootstrap();
-const stationHex = (cfg.stationId || 0x7f29).toString(16).toUpperCase().padStart(4, "0");
-
-document.getElementById("station-label").textContent = stationHex;
+document.getElementById("station-label").textContent = cfg.stationParam;
 
 const listenState = document.getElementById("listen-state");
 const sigBar = document.getElementById("sig-bar");
@@ -24,22 +22,25 @@ const wave = document.getElementById("wave");
 const waveCtx = wave.getContext("2d");
 const banner = document.getElementById("loop-banner");
 
-const series = new TimeSeries(8000);
+const series = new TimeSeries(10000);
 const work = document.createElement("canvas");
 const workCtx = work.getContext("2d", { willReadFrequently: true });
 const overCtx = overlay.getContext("2d");
-
 const COLS = 16;
 const ROWS = 10;
 const grids = [];
+const votes = new Map();
+const NEED = 2;
+const WINDOW = 9;
 
 let stream = null;
 let raf = 0;
-let lastSeq = -1;
+let running = false;
 let aim = { nx: 0.5, ny: 0.5 };
 let tapUntil = 0;
-let running = false;
+let lastKey = "";
 let audioCtx = null;
+let recentKeys = [];
 
 function log(line) {
   const t = new Date().toISOString().slice(11, 23);
@@ -62,23 +63,25 @@ function pulse() {
     g.connect(audioCtx.destination);
     g.gain.value = 0.07;
     o.start();
-    o.stop(audioCtx.currentTime + 0.14);
+    o.stop(audioCtx.currentTime + 0.12);
   } catch { /* ignore */ }
-  navigator.vibrate?.([40, 40, 90]);
+  navigator.vibrate?.([40, 50, 80]);
 }
 
-function showRecovered(sequence, agrees) {
-  recBody.textContent = `station  ${stationHex}\nseq      ${sequence}\nvote     ${agrees}/8 bits unanimous\ncrc      2-of-3 match`;
-  banner.hidden = false;
-  banner.textContent = `RECOVERED SEQ ${sequence}`;
-  pulse();
-  clearTimeout(showRecovered._t);
-  showRecovered._t = setTimeout(() => {
-    banner.hidden = true;
-  }, 2000);
+function keyOf(packet) {
+  return `${packet.stationId}:${packet.sequence}:${packet.type}:${packet.payload}`;
 }
 
-function paintWave(score, recovered) {
+function tally(packet) {
+  const key = keyOf(packet);
+  recentKeys.push(key);
+  if (recentKeys.length > WINDOW) recentKeys.shift();
+  const count = recentKeys.filter((k) => k === key).length;
+  votes.set(key, { packet, n: count });
+  return { key, count, of: recentKeys.length };
+}
+
+function paintWave(score, ok) {
   const w = wave.width;
   const h = wave.height;
   waveCtx.fillStyle = "#10101c";
@@ -86,7 +89,7 @@ function paintWave(score, recovered) {
   const slice = series.samples.slice(-160);
   if (slice.length < 2) return;
   waveCtx.beginPath();
-  waveCtx.strokeStyle = recovered ? "#7dffb2" : score >= 0.3 ? "#ffd37e" : "#7ee7ff";
+  waveCtx.strokeStyle = ok ? "#7dffb2" : score >= 0.3 ? "#ffd37e" : "#7ee7ff";
   waveCtx.lineWidth = 1.5;
   slice.forEach((s, i) => {
     const x = (i / (slice.length - 1)) * w;
@@ -97,15 +100,15 @@ function paintWave(score, recovered) {
   waveCtx.stroke();
 }
 
-function paintOverlay(spot, recovered) {
+function paintOverlay(spot, ok) {
   overlay.width = overlay.clientWidth * devicePixelRatio;
   overlay.height = overlay.clientHeight * devicePixelRatio;
   overCtx.clearRect(0, 0, overlay.width, overlay.height);
   if (!spot) return;
   const x = spot.x * overlay.width / work.width;
   const y = spot.y * overlay.height / work.height;
-  overCtx.strokeStyle = recovered ? "rgba(125,255,178,0.95)" : "rgba(126,231,255,0.85)";
-  overCtx.lineWidth = recovered ? 3 : 2;
+  overCtx.strokeStyle = ok ? "rgba(125,255,178,0.95)" : "rgba(126,231,255,0.85)";
+  overCtx.lineWidth = ok ? 3 : 2;
   overCtx.strokeRect(x - 28, y - 28, 56, 56);
 }
 
@@ -133,39 +136,58 @@ function blinkCell() {
       if (v < min) min = v;
       if (v > max) max = v;
     }
-    const span = max - min;
-    if (span > bestV) {
-      bestV = span;
+    if (max - min > bestV) {
+      bestV = max - min;
       bestI = i;
     }
   }
   if (bestV < 0.1) return null;
-  return {
-    nx: ((bestI % COLS) + 0.5) / COLS,
-    ny: (Math.floor(bestI / COLS) + 0.5) / ROWS,
-  };
+  return { nx: ((bestI % COLS) + 0.5) / COLS, ny: (Math.floor(bestI / COLS) + 0.5) / ROWS };
+}
+
+function commit(packet, vote) {
+  const view = formatPacket(packet);
+  const obs = asObservation(packet);
+  recBody.textContent = [
+    `STATION  ${view.st}`,
+    `SEQ      ${view.seq}`,
+    `SYMBOL   ${view.sym}`,
+    `TYPE     ${view.typ} ${view.typeName}`,
+    `CRC      OK`,
+    `VOTE     ${vote.count}/${vote.of}`,
+    `OBS      ${obs.state_hint}`,
+  ].join("\n");
+  banner.hidden = false;
+  banner.textContent = `PACKET ${view.st} ${view.seq} SYM ${view.sym}`;
+  pulse();
+  clearTimeout(commit._t);
+  commit._t = setTimeout(() => {
+    banner.hidden = true;
+  }, 2200);
+  log(`COMMIT ${view.st} seq=${view.seq} sym=${view.sym} vote=${vote.count}/${vote.of}`);
 }
 
 function applyDecode(decoded, brightness, st) {
   const contrast = st.contrast ?? 0;
   const score = decoded.score || 0;
-  const recovered = !!(decoded.frame && decoded.rejected == null);
+  const packet = decoded.packet || null;
 
   sigBar.style.width = `${Math.round(Math.max(0, Math.min(1, brightness)) * 100)}%`;
   conBar.style.width = `${Math.round(Math.max(0, Math.min(1, contrast / 0.4)) * 100)}%`;
-  paintWave(score, recovered);
+  paintWave(score, !!packet);
   diag.textContent = `${(brightness * 100).toFixed(0)}%  con ${(contrast * 100).toFixed(0)}%  corr ${score.toFixed(2)}  ${Math.round(decoded.symbolMs || cfg.symbolMs)}ms`;
 
-  if (recovered) {
-    const sequence = decoded.frame.sequence;
-    setState("RECOVERED", "ok");
-    syncLine.textContent = `Authenticated  corr ${score.toFixed(2)}`;
-    frameLine.textContent = `SEQ ${sequence}`;
-    eccLine.textContent = `vote ${decoded.frame.agrees}/8`;
-    if (sequence !== lastSeq) {
-      lastSeq = sequence;
-      showRecovered(sequence, decoded.frame.agrees);
-      log(`RECOVERED station ${stationHex} seq ${sequence}`);
+  if (packet) {
+    const vote = tally(packet);
+    const view = formatPacket(packet);
+    const ready = vote.count >= NEED;
+    setState(ready ? "PACKET OK" : "CRC CANDIDATE", ready ? "ok" : "search");
+    syncLine.textContent = `CRC ok  corr ${score.toFixed(2)}`;
+    frameLine.textContent = `${view.st} ${view.seq} SYM ${view.sym}`;
+    eccLine.textContent = `VOTE ${vote.count}/${vote.of}`;
+    if (ready && vote.key !== lastKey) {
+      lastKey = vote.key;
+      commit(packet, vote);
     }
     return;
   }
@@ -173,8 +195,8 @@ function applyDecode(decoded, brightness, st) {
   if (decoded.preamble || score >= 0.3) {
     setState("PREAMBLE CANDIDATE", "search");
     syncLine.textContent = `Candidate only  corr ${score.toFixed(2)}`;
-    frameLine.textContent = `${decoded.bitsHave || 0}/${decoded.bitsNeed || 24}  ${decoded.rejected || "collecting"}`;
-    eccLine.textContent = "vote not settled";
+    frameLine.textContent = `${decoded.bitsHave || 0}/${decoded.bitsNeed || 64}  ${decoded.rejected || "collecting"}`;
+    eccLine.textContent = "CRC not ok";
     return;
   }
 
@@ -183,7 +205,7 @@ function applyDecode(decoded, brightness, st) {
     syncLine.textContent = "Fill the box with the disc";
     return;
   }
-  setState(STATE.SEARCHING, "search");
+  setState("SEARCHING", "search");
   syncLine.textContent = `Searching  corr ${score.toFixed(2)}`;
 }
 
@@ -215,7 +237,7 @@ function sampleFrame() {
     series.push(performance.now(), value);
     const st = recentStats(series);
     const decoded = decodeFromSeries(series, cfg.symbolMs);
-    paintOverlay(spot, !!(decoded.frame && decoded.rejected == null));
+    paintOverlay(spot, !!decoded.packet);
     applyDecode(decoded, value, st);
   }
   raf = requestAnimationFrame(sampleFrame);
@@ -223,7 +245,7 @@ function sampleFrame() {
 
 async function startCamera() {
   running = true;
-  modeLabel.textContent = `camera · ${cfg.symbolMs}ms/symbol`;
+  modeLabel.textContent = `expect SYM ${cfg.payloadHex} · ${cfg.symbolMs}ms/bit`;
   stream = await navigator.mediaDevices.getUserMedia({
     audio: false,
     video: {
@@ -258,8 +280,10 @@ document.getElementById("cam").addEventListener("click", () => {
 
 document.getElementById("clear").addEventListener("click", () => {
   series.samples.length = 0;
-  lastSeq = -1;
+  votes.clear();
+  recentKeys = [];
+  lastKey = "";
   logEl.textContent = "";
-  recBody.textContent = "none — point at the computer disc";
+  recBody.textContent = "none yet";
   banner.hidden = true;
 });

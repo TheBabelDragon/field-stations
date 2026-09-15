@@ -10,16 +10,15 @@
 <body>
   <div class="wrap">
     <p class="kicker">TheBabelDragon · field-stations</p>
-    <h1>One disc.<br />One camera.</h1>
-    <p class="lede">The test is the physical loop. Computer transmits. Phone recovers the sequence on the screen.</p>
+    <h1>One disc.<br />One packet.</h1>
+    <p class="lede">The camera is the instrument. <code>sym=</code> is the payload byte on the wire, not the blink rate.</p>
 
     <div class="card">
-      <h2>TEST</h2>
-      <p class="lede">1. Computer: transmitter, tap fullscreen.</p>
-      <p class="lede">2. Phone: decoder → CAMERA → disc in the box.</p>
-      <p class="lede">3. LAST RECOVERED seq must match the number on the computer.</p>
+      <h2>PACKET</h2>
+      <pre>SYNC | VER | STATION | SEQ | TYPE | LEN | SYMBOL | CRC</pre>
+      <p class="lede">Same packet repeats 3×. Decoder votes. Commit at 2 matching CRC-ok frames.</p>
       <div class="row">
-        <a href="tx.html?station=7F29&amp;frames=4"><button class="primary">TRANSMITTER</button></a>
+        <a href="tx.html?station=7F29&amp;sym=67"><button class="primary">TRANSMITTER</button></a>
         <a href="decode.html?station=7F29&amp;sym=67"><button class="primary">DECODER</button></a>
       </div>
     </div>
@@ -27,8 +26,8 @@
     <div class="card">
       <h2>TARGET</h2>
       <p class="lede"><a href="https://thebabeldragon.github.io/field-stations/">https://thebabeldragon.github.io/field-stations/</a></p>
-      <p class="lede"><a href="https://thebabeldragon.github.io/field-stations/tx.html?station=7F29&amp;frames=4">tx.html</a></p>
-      <p class="lede"><a href="https://thebabeldragon.github.io/field-stations/decode.html?station=7F29&amp;sym=67">decode.html</a></p>
+      <p class="lede"><a href="https://thebabeldragon.github.io/field-stations/tx.html?station=7F29&amp;sym=67">tx.html?station=7F29&amp;sym=67</a></p>
+      <p class="lede"><a href="https://thebabeldragon.github.io/field-stations/decode.html?station=7F29&amp;sym=67">decode.html?station=7F29&amp;sym=67</a></p>
     </div>
   </div>
 </body>
